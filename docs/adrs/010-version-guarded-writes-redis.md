@@ -1,10 +1,11 @@
 # ADR-010: Atomic version-guarded writes in Redis
 
+-
 - **Status:** Proposed
 - **Features:** F3
 - **Containers involved:** Tracking Query Service, tracking-cache
 
-## Context and Problem
+## context and Problem
 
 Several Tracking Query instances apply events to the same view. A read-compare-write in application code can interleave and write an older status over a newer one — the same "Delivered → On the Way" bug the case describes.
 

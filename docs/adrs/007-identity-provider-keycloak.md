@@ -1,10 +1,11 @@
 # ADR-007: Identity provider: Keycloak
 
+-
 - **Status:** Proposed
 - **Features:** F1 (all, as cross-cutting)
 - **Containers involved:** Identity Provider, API Gateway, apps
 
-## Context and Problem
+## context and Problem
 
 Three apps (customer, driver, operations) need login, and every API call must carry the user's role. The rest of the stack is open source and self-hosted.
 

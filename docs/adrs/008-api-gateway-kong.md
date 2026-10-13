@@ -1,10 +1,11 @@
 # ADR-008: API Gateway: Kong OSS (DB-less)
 
+- 
 - **Status:** Proposed
 - **Features:** F1–F5 (entry point)
 - **Containers involved:** API Gateway
 
-## Context and Problem
+## context and Problem
 
 All external traffic needs a single entry point that validates JWTs, limits requests per user, adds a correlation id, routes to six services and proxies SSE without buffering.
 
