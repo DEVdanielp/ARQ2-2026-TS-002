@@ -18,7 +18,7 @@
 
 | Feature | Name | Owner service(s) | Key ADRs |
 |---------|------|------------------|----------|
-| F1 | <!-- TODO --> Profiles & assignment | Profiles & Assignment | 003, 005, 007, 015 |
+| F1 | Profiles & order-to-driver assignment | Profiles & Assignment | 003, 005, 007, 015 |
 | F2 | Sequential GPS ingestion | GPS Ingestion API, GPS Tracking Worker | 001, 005, 009, 011 |
 | F3 | Order tracking (read model + real time) | Tracking Query Service | 002, 004, 010 |
 | F4 | Event-driven order state transitions | Orders Service | 005, 006, 009 |
@@ -78,8 +78,8 @@ Order:
 |------|----------------|----|--------------|
 | `CREATED` | `PickupConfirmed` | `ON_THE_WAY` | `DRIVER` |
 | `ON_THE_WAY` | `DeliveryConfirmed` | `DELIVERED` | `DRIVER` |
-| `CREATED` | `CancellationRequested` | `CANCELLED` | `CUSTOMER`, `OPERATIONS` |
-| <!-- TODO --> | | | |
+| `CREATED` | `CancellationRequested` | `CANCELLED` | `CUSTOMER` |
+| `ON_THE_WAY` | `CancellationRequested` (reason required) | `CANCELLED` | `OPERATIONS` |
 
 ### 2.3 GPS Tracking
 
