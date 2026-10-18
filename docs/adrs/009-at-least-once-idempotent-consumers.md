@@ -1,10 +1,15 @@
 # ADR-009: At-least-once delivery with idempotent consumers
 
+<<<<<<< HEAD
 - **Status:** Accepted
+=======
+- 
+- **Status:** Proposed
+>>>>>>> 84a3c1bd592fa26616011f2a9398ea046d9ff144
 - **Features:** F2, F4, F5
 - **Containers involved:** All Kafka consumers
 
-## Context and Problem
+## context and Problem
 
 Events can be redelivered (consumer restarts, relay retries). Processing an event twice must never produce a wrong state, a duplicate notification or a status regression.
 
