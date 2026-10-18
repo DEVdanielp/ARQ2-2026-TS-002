@@ -1,6 +1,6 @@
 # ADR-008: API Gateway: Kong OSS (DB-less)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F1–F5 (entry point)
 - **Containers involved:** API Gateway
 

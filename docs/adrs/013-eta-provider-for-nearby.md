@@ -1,6 +1,6 @@
 # ADR-013: ETA calculation for the NEARBY rule
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F5
 - **Containers involved:** GPS Tracking Worker, Maps/ETA Provider
 

@@ -1,6 +1,6 @@
 # ADR-009: At-least-once delivery with idempotent consumers
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F2, F4, F5
 - **Containers involved:** All Kafka consumers
 
@@ -16,7 +16,7 @@ Events can be redelivered (consumer restarts, relay retries). Processing an even
 
 ## Decision
 
-Consumers commit offsets after processing and are idempotent: Orders stores `processed_events`; GPS ignores processed sequences; Tracking Query uses version/sequence guards; Notifications uses `UNIQUE(order, type)`.
+Consumers commit offsets after processing and are idempotent: Orders stores `processed_events`; GPS ignores processed sequences; Tracking Query uses version/sequence guards; Notifications uses `UNIQUE(order, type)`. Because the events of one order travel on different topics, consumers also tolerate any arrival order across topics: status events by version, assignment events for a terminal order are ignored, and locations by sequence (ADR-016).
 
 ## Trade-offs
 

@@ -1,6 +1,6 @@
 # ADR-011: Storage for the append-only GPS history
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F2
 - **Containers involved:** GPS Tracking Worker, tracking-db
 

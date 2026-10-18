@@ -30,7 +30,7 @@ Each bounded context is a microservice with its own database. Services communica
 
 - More deployables to build, run and monitor. *Mitigation:* containers and a single `docker-compose` for local development.
 - Distributed debugging. *Mitigation:* `X-Correlation-Id` propagated in every request and event, centralized logs.
-- Eventual consistency and data duplication (projections, contact copies). *Mitigation:* see ADR-015.
+- Eventual consistency and data duplication (projections, contact copies). *Mitigation:* see ADR-015; the consistency of the order lifecycle across services is handled by the saga in ADR-016.
 
 ## Final Justification
 
