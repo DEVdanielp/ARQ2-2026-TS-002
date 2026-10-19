@@ -31,4 +31,4 @@ FastTrack is a delivery app. Its current architecture forces the customer to com
 - [C1 - Context](docs/assets/C1-Context.drawio.png)
 - [C2 - Containers](docs/assets/C2-Containers.drawio.png)
 
-Link TS-002 Google Docs: <!-- TODO: pegar link -->
+Link TS-002 Google Docs: [<!-- Link -->](https://correoitmedu-my.sharepoint.com/:w:/g/personal/danielpalacios1117027_correo_itm_edu_co/IQDjt9md_T0DSbvqTxovU5JjAdX1tZDsh-GdMhln6vdF6lU?e=zq28A1)
