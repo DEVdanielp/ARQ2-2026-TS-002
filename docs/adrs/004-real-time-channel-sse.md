@@ -1,6 +1,6 @@
 # ADR-004: Real-time updates to the customer with SSE
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F3
 - **Containers involved:** Customer App, API Gateway, Tracking Query Service, tracking-cache
 

@@ -1,6 +1,6 @@
 # ADR-015: Data needed by another service is replicated through events
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F1, F5
 - **Containers involved:** Profiles & Assignment, Notification Service, Tracking Query
 
@@ -16,7 +16,7 @@ Some services need data they do not own: Notifications needs the customer's cont
 
 ## Decision
 
-Owners publish events (`CustomerContactUpdated`, `DriverAssigned`) and consumers store only the fields they need.
+Owners publish events (`CustomerContactUpdated`, `DriverAssigned`, `DriverUnassigned`) and consumers store only the fields they need. A removal (for example, `DriverUnassigned`) is replicated the same way as a creation.
 
 ## Trade-offs
 

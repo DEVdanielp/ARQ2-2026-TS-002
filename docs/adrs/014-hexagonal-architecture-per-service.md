@@ -1,6 +1,6 @@
 # ADR-014: Hexagonal architecture inside each service
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F1–F5
 - **Containers involved:** All services
 

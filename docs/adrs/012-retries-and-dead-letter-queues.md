@@ -1,6 +1,6 @@
 # ADR-012: Retries with backoff and dead-letter queues
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F5 (and all consumers)
 - **Containers involved:** Notification Service, all consumers
 

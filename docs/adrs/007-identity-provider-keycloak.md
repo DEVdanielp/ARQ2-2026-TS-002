@@ -1,7 +1,7 @@
 # ADR-007: Identity provider: Keycloak
 
 -
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F1 (all, as cross-cutting)
 - **Containers involved:** Identity Provider, API Gateway, apps
 

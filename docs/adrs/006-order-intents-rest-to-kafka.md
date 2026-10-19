@@ -1,6 +1,6 @@
 # ADR-006: Order intents enter over REST and are queued per order in Kafka
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Features:** F4
 - **Containers involved:** Driver App, Customer App, Operations Console, API Gateway, Orders Service
 
@@ -16,7 +16,7 @@ Feature 4 requires state transitions driven exclusively by events. Pickup and de
 
 ## Decision
 
-Apps call `POST /orders/{id}/intents` through the gateway. Orders publishes `PickupConfirmed`, `DeliveryConfirmed` or `CancellationRequested` to `orders.intents` (key = `orderId`) and returns `202 Accepted`. `IntentConsumer` applies transitions one at a time per order.
+Apps call `POST /orders/{id}/intents` through the gateway. Orders publishes `PickupConfirmed`, `DeliveryConfirmed` or `CancellationRequested` to `orders.intents` (key = `orderId`) and returns `202 Accepted`. `IntentConsumer` applies transitions one at a time per order. Intents from a driver who is no longer assigned (after `DriverUnassigned`) are rejected.
 
 ## Trade-offs
 

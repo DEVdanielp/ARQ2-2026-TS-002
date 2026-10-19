@@ -1,7 +1,11 @@
 # ADR-010: Atomic version-guarded writes in Redis
 
+<<<<<<< HEAD
+- **Status:** Accepted
+=======
 -
 - **Status:** Proposed
+>>>>>>> 84a3c1bd592fa26616011f2a9398ea046d9ff144
 - **Features:** F3
 - **Containers involved:** Tracking Query Service, tracking-cache
 
