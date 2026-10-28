@@ -82,7 +82,7 @@ services:
     environment:
       BOOTSTRAP: kafka:19092
     volumes:
-      - ./infra/kafka/create-topics.sh:/scripts/create-topics.sh:ro
+      - ./deploy/kafka/create-topics.sh:/scripts/create-topics.sh:ro
     restart: "no"
     networks: [fasttrack]
 
@@ -111,7 +111,7 @@ services:
       SERVICE_DB_PASSWORD: fasttrack
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./infra/postgres/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
+      - ./deploy/postgres/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -149,7 +149,7 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HEALTH_ENABLED: "true"
     volumes:
-      - ./infra/keycloak/fasttrack-realm.json:/opt/keycloak/data/import/fasttrack-realm.json:ro
+      - ./deploy/keycloak/fasttrack-realm.json:/opt/keycloak/data/import/fasttrack-realm.json:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
       interval: 10s
@@ -175,7 +175,7 @@ services:
       KONG_ADMIN_ACCESS_LOG: /dev/stdout
       KONG_ADMIN_ERROR_LOG: /dev/stderr
     volumes:
-      - ./infra/kong/kong.yml:/kong/kong.yml:ro
+      - ./deploy/kong/kong.yml:/kong/kong.yml:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -201,7 +201,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks: [fasttrack]
 
   loki:
@@ -216,7 +216,7 @@ services:
     image: grafana/promtail:3.3.2
     command: ["-config.file=/etc/promtail/promtail.yml"]
     volumes:
-      - ./infra/observability/promtail.yml:/etc/promtail/promtail.yml:ro
+      - ./deploy/observability/promtail.yml:/etc/promtail/promtail.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on: [loki]
     networks: [fasttrack]
@@ -230,7 +230,7 @@ services:
       - "4317:4317"
       - "4318:4318"
     volumes:
-      - ./infra/observability/tempo.yml:/etc/tempo/tempo.yml:ro
+      - ./deploy/observability/tempo.yml:/etc/tempo/tempo.yml:ro
     networks: [fasttrack]
 
   grafana:
@@ -241,7 +241,7 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
-      - ./infra/observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./deploy/observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - grafana-data:/var/lib/grafana
     depends_on: [prometheus, loki, tempo]
     networks: [fasttrack]
