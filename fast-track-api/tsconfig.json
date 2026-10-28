@@ -1,0 +1,76 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "types": [
+      "vitest/globals",
+      "node"
+    ],
+    "paths": {
+      "@libs/events": [
+        "./libs/events/src/index.ts"
+      ],
+      "@libs/events/*": [
+        "./libs/events/src/*"
+      ],
+      "@libs/kafka": [
+        "./libs/kafka/src/index.ts"
+      ],
+      "@libs/kafka/*": [
+        "./libs/kafka/src/*"
+      ],
+      "@libs/observability": [
+        "./libs/observability/src/index.ts"
+      ],
+      "@libs/observability/*": [
+        "./libs/observability/src/*"
+      ],
+      "@libs/outbox": [
+        "./libs/outbox/src/index.ts"
+      ],
+      "@libs/outbox/*": [
+        "./libs/outbox/src/*"
+      ]
+    }
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/fast-track-api/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/gps-ingestion-api/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/gps-tracking-worker/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/orders-service/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/profiles-service/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/tracking-query-service/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/notification-service/tsconfig.app.json"
+    }
+  ]
+}

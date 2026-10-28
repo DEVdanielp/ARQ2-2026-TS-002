@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "apps/fast-track-api/src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "builder": "rspack",
+    "tsConfigPath": "apps/fast-track-api/tsconfig.app.json"
+  },
+  "projects": {
+    "events": {
+      "type": "library",
+      "root": "libs/events",
+      "entryFile": "index",
+      "sourceRoot": "libs/events/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/events/tsconfig.lib.json"
+      }
+    },
+    "fast-track-api": {
+      "type": "application",
+      "root": "apps/fast-track-api",
+      "entryFile": "main",
+      "sourceRoot": "apps/fast-track-api/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/fast-track-api/tsconfig.app.json"
+      }
+    },
+    "gps-ingestion-api": {
+      "type": "application",
+      "root": "apps/gps-ingestion-api",
+      "entryFile": "main",
+      "sourceRoot": "apps/gps-ingestion-api/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/gps-ingestion-api/tsconfig.app.json"
+      }
+    },
+    "gps-tracking-worker": {
+      "type": "application",
+      "root": "apps/gps-tracking-worker",
+      "entryFile": "main",
+      "sourceRoot": "apps/gps-tracking-worker/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/gps-tracking-worker/tsconfig.app.json"
+      }
+    },
+    "kafka": {
+      "type": "library",
+      "root": "libs/kafka",
+      "entryFile": "index",
+      "sourceRoot": "libs/kafka/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/kafka/tsconfig.lib.json"
+      }
+    },
+    "notification-service": {
+      "type": "application",
+      "root": "apps/notification-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/notification-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/notification-service/tsconfig.app.json"
+      }
+    },
+    "observability": {
+      "type": "library",
+      "root": "libs/observability",
+      "entryFile": "index",
+      "sourceRoot": "libs/observability/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/observability/tsconfig.lib.json"
+      }
+    },
+    "orders-service": {
+      "type": "application",
+      "root": "apps/orders-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/orders-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/orders-service/tsconfig.app.json"
+      }
+    },
+    "outbox": {
+      "type": "library",
+      "root": "libs/outbox",
+      "entryFile": "index",
+      "sourceRoot": "libs/outbox/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/outbox/tsconfig.lib.json"
+      }
+    },
+    "profiles-service": {
+      "type": "application",
+      "root": "apps/profiles-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/profiles-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/profiles-service/tsconfig.app.json"
+      }
+    },
+    "tracking-query-service": {
+      "type": "application",
+      "root": "apps/tracking-query-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/tracking-query-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/tracking-query-service/tsconfig.app.json"
+      }
+    }
+  },
+  "monorepo": true,
+  "root": "apps/fast-track-api"
+}
