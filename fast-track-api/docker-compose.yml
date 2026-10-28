@@ -8,7 +8,7 @@
 # Host ports
 #   8000  Kong proxy (all public API traffic: http://localhost:8000/v1/...)
 #   8001  Kong admin API
-#   8080  Keycloak (realm "fasttrack")
+#   8180  Keycloak (realm "fasttrack")
 #   9092  Kafka (for tools running on the host)
 #   8085  Kafka UI
 #   5432  PostgreSQL (one database per service)
@@ -37,7 +37,7 @@ x-app-env: &app-env
   PORT: "3000"
   port: "3000" # main.ts currently reads process.env.port
   KAFKA_BROKERS: kafka:19092
-  KEYCLOAK_ISSUER: http://localhost:8080/realms/fasttrack
+  KEYCLOAK_ISSUER: http://localhost:8180/realms/fasttrack
   OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
   LOG_LEVEL: info
 
@@ -139,13 +139,13 @@ services:
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm"]
     ports:
-      - "8080:8080"
+      - "8180:8080"
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      # Fixed issuer so tokens always carry iss=http://localhost:8080/realms/fasttrack,
+      # Fixed issuer so tokens always carry iss=http://localhost:81380/realms/fasttrack,
       # which is the value Kong uses to pick the verification key.
-      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME: http://localhost:8180
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HEALTH_ENABLED: "true"
     volumes:

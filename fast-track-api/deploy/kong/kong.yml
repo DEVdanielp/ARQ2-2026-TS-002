@@ -52,7 +52,7 @@ services:
 consumers:
   - username: keycloak-fasttrack
     jwt_secrets:
-      - key: http://localhost:8080/realms/fasttrack
+      - key: http://localhost:8180/realms/fasttrack
         algorithm: RS256
         rsa_public_key: |
           -----BEGIN PUBLIC KEY-----
