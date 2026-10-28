@@ -1,10 +1,10 @@
 # ARQ2-2026-TS-002
 
-## Caso Asignado
+## Assigned case
 
 **Case 2: FastTrack - Last-Mile Logistics**
 
-## Integrantes
+## Members
 
 - Daniel Palacios
 - Manuela Gomez
@@ -24,7 +24,7 @@ FastTrack is a delivery app. Its current architecture forces the customer to com
 4. Engine that processes order state transitions (Created -> On the Way -> Delivered) driven exclusively by events, including Cancelled as a terminal state (by the customer only while Created; by operations staff, with a reason, while On the Way).
 5. Proactive notification system (push/email) informing the final customer of package proximity.
 
-## Documentación
+## Documentation
 
 - [Especificación (spec.md)](docs/spec.md)
 - [ADRs](docs/adrs/)
