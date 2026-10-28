@@ -143,12 +143,13 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      # Fixed issuer so tokens always carry iss=http://localhost:81380/realms/fasttrack,
+      # Fixed issuer so tokens always carry iss=http://localhost:8180/realms/fasttrack,
       # which is the value Kong uses to pick the verification key.
       KC_HOSTNAME: http://localhost:8180
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HEALTH_ENABLED: "true"
     volumes:
+      # DEV ONLY: the realm file commits an RSA key so Kong can verify tokens offline. Never reuse it.
       - ./deploy/keycloak/fasttrack-realm.json:/opt/keycloak/data/import/fasttrack-realm.json:ro
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3"]

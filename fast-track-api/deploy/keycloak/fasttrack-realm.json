@@ -224,6 +224,5 @@
         }
       }
     ]
-  },
-  "_comment": "DEV ONLY. The RSA key below is committed on purpose so Kong can verify tokens offline. Never reuse it outside local development."
+  }
 }
