@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: kong
+    static_configs:
+      - targets: ["kong:8100"]
+
+  # Each service exposes GET /metrics on port 3000 (prom-client).
+  # Targets show as DOWN until the service runs with `--profile apps`.
+  - job_name: services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - gps-ingestion-api:3000
+          - gps-tracking-worker:3000
+          - profiles-service:3000
+          - orders-service:3000
+          - tracking-query-service:3000
+          - notification-service:3000

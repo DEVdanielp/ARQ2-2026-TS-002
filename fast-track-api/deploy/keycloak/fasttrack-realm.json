@@ -1,0 +1,229 @@
+{
+  "realm": "fasttrack",
+  "enabled": true,
+  "displayName": "FastTrack",
+  "accessTokenLifespan": 900,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "CUSTOMER",
+        "description": "Customer App user"
+      },
+      {
+        "name": "DRIVER",
+        "description": "Driver App user"
+      },
+      {
+        "name": "OPERATIONS",
+        "description": "Operations Console user"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "customer-app",
+      "name": "Customer App",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "*"
+      }
+    },
+    {
+      "clientId": "driver-app",
+      "name": "Driver App",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "*"
+      }
+    },
+    {
+      "clientId": "operations-console",
+      "name": "Operations Console",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "*"
+      }
+    },
+    {
+      "clientId": "fasttrack-dev",
+      "name": "DEV ONLY - password grant for curl/Postman",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": []
+    }
+  ],
+  "users": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "username": "customer1",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Ana",
+      "lastName": "Customer",
+      "email": "customer1@fasttrack.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "CUSTOMER",
+        "default-roles-fasttrack"
+      ]
+    },
+    {
+      "id": "11111111-1111-4111-8111-111111111112",
+      "username": "customer2",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Luis",
+      "lastName": "Customer",
+      "email": "customer2@fasttrack.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "CUSTOMER",
+        "default-roles-fasttrack"
+      ]
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222221",
+      "username": "driver1",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Juan",
+      "lastName": "Driver",
+      "email": "driver1@fasttrack.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "DRIVER",
+        "default-roles-fasttrack"
+      ]
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "username": "driver2",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Maria",
+      "lastName": "Driver",
+      "email": "driver2@fasttrack.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "DRIVER",
+        "default-roles-fasttrack"
+      ]
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333331",
+      "username": "ops1",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Olga",
+      "lastName": "Operations",
+      "email": "ops1@fasttrack.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "OPERATIONS",
+        "default-roles-fasttrack"
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.keys.KeyProvider": [
+      {
+        "name": "fasttrack-dev-rsa",
+        "providerId": "rsa",
+        "subComponents": {},
+        "config": {
+          "priority": [
+            "200"
+          ],
+          "enabled": [
+            "true"
+          ],
+          "active": [
+            "true"
+          ],
+          "algorithm": [
+            "RS256"
+          ],
+          "privateKey": [
+            "MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCeXCU7hHDydJqFupPEpeUg88xOwRsEh6C1GwoWvZOLoVYB5ExOyj1+hLafI4Nfd5tIZ78hOfuOLD/jH+lOBPvtIeIp/bBVO9dlSzvJtBI4p3YFC7H6g9vcKOOHptYf8sm1Y6jIUpR9E7i9JxJSx+hX7UK8js8yRYjenQsJ5Kirh8w3VLbOp9OkSYb/+pDOU+oHbIbVQfX8jpjO+Uf2+Cyc0V0c6wDCFtjT+qjEsEbDMGSc6Z8k54aE/PEGUJ+sQEsC2sde+c8YXbo/qW1qNXojKhDwUjRcSVTngh/RCunIjGcf+xvkYJ0vvtgZ5V35666WoXxAbovKcj62D5JNzO/NAgMBAAECggEAJwH1JOg+hyacUoEPOaMQofGT27la7Z54Amxu64OWltAutqgU+Np9086eimwtxeQZMrhlfuqAsbhqI0j+x9pX8QVF58iG+TPUnq2txEVQMLblTiBfnqEA1QYYZ9d7iqKcN4tdLb0TuQyU1rkLXStDavc1V2uJE63HpWhDKhRyTM/zFd7JrZVnEi3Sj459NjtLqeD79YL2q9OBpMKlEk/5PtLJbWImIOUt+xXaRyiJdf6aedQNv1J0A0HnQsxnS+879k55QwYTlN1rx9ZBWop5DdahuZQYK4//hQQalCLcrcH5uSaG1yaDcft7lV7BUc+qpUGigcjFwiCoLP99Edn0cQKBgQDLRQ0YLQEjSMlHMsCin4sYuYZkBfsijx6xNi2snmmuVsolEFlcf3YFyaOLkmDfaukv3D+GrfXL2CO/2Rcavluf4OTGxQYOCYZrINHx/P5JPpIWr0nr4NbIzflQGwdgGW/uedRjOdgBnVo2VMqchnFGt+MUKukrX2DT16mTAV1PPQKBgQDHcK2aEP4z8SilTYdeaRILLek3CmWHMH3vf3McHiGIKQgDB3EMm/u4dkzlTgRenEvQM7Gvt2hr0mG3rFsX2DHsJ2Ot5t6+mtj2w29+fY5aZHU5RDoFlzE+HR3KwWmnjwMbT4jlAJr4QxWVJTPlQuvNnMcj4kuPw5GsHTah2pAr0QKBgBLvbsXWw2lfCWj5gFpl1FZMSgmdSQSyImDNtDmFVEDqUtBbEof8U6k8XGDPFPkbA3fy43QPVntTuhjQB0f1faGKGKWvit3Z40ytdQE+2Q1Hp+I3GALCIh/4mAXvTqOUGwozDSblJ4sW9mVjRrCIEZtN2/hv+uKQcvuo9mH8WY3dAoGAYEYQR1L0ovZC/KjUM8rcnvDmp18pa30JDdekJWqWHThRWcT52XBirsTMkdR7X4BrSHHr0Drk+UdxTEyzHGuMjcbl40iTNcdh/JyS8aiCUzgzLhW1PIWji6xaeUmsSupKQaC/IGyOYlFf1cNDreQEGBkaOERA3YE2jLL9cFwlREECgYB9/hW6fGt25cinIbLpAL1nb8F7kp5Bmo86Q57zeapchaOpCALy2/JYsZVLW5ik3Hss6Wt1mcsLDANvEuzj8wxFAK7ndEAi2Jq9M8jIEbzH/4pTNR9T7tMZ00eNSKx4SJxdzEE9OIQ1JdTiZn654WdFZrkHk8gbkyycsnDuRMdd1w=="
+          ],
+          "certificate": [
+            "MIIDCTCCAfGgAwIBAgIUFlW3ImXL3f9nZ7HQaH6TDC/Nd84wDQYJKoZIhvcNAQELBQAwFDESMBAGA1UEAwwJZmFzdHRyYWNrMB4XDTI2MTAyODAxMjY1N1oXDTM2MTAyNTAxMjY1N1owFDESMBAGA1UEAwwJZmFzdHRyYWNrMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnlwlO4Rw8nSahbqTxKXlIPPMTsEbBIegtRsKFr2Ti6FWAeRMTso9foS2nyODX3ebSGe/ITn7jiw/4x/pTgT77SHiKf2wVTvXZUs7ybQSOKd2BQux+oPb3Cjjh6bWH/LJtWOoyFKUfRO4vScSUsfoV+1CvI7PMkWI3p0LCeSoq4fMN1S2zqfTpEmG//qQzlPqB2yG1UH1/I6YzvlH9vgsnNFdHOsAwhbY0/qoxLBGwzBknOmfJOeGhPzxBlCfrEBLAtrHXvnPGF26P6ltajV6IyoQ8FI0XElU54If0QrpyIxnH/sb5GCdL77YGeVd+euulqF8QG6LynI+tg+STczvzQIDAQABo1MwUTAdBgNVHQ4EFgQUuEuybDCdrGcygyM+3qg944Cv2HUwHwYDVR0jBBgwFoAUuEuybDCdrGcygyM+3qg944Cv2HUwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAUDeaH6o8edmiDEsW2BKWWrljuklaBoLjdD5sZxpgfQvVVKGVsJDzMLcc8EetTPNoQh8CMObj+93FM8hgK/wMdOH3lbultLUqS8awl/IB84aQPqw3VbWNxyK6YEeP3nCqQbCsbDX7apNXLCRO7APDsUBCJYqa3NwoB7vcmxoICvY7APEUdsoRKirsqvItQtDOoi1dzGkhf4fCr0oCTMajWd+3PbBN0dgsMyFO7OfnddOM1rXXwIgdaiT834C+E8GVppmVH5zU0oLBr9xD82W/ogn5fCfaJcIIJU3SVLik8HvqzQoohyYUY3pA3MohFvDDADbE0sYEnMk2VVJovuGFaw=="
+          ]
+        }
+      }
+    ]
+  },
+  "_comment": "DEV ONLY. The RSA key below is committed on purpose so Kong can verify tokens offline. Never reuse it outside local development."
+}

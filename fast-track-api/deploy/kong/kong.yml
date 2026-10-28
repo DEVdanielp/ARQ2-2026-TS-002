@@ -1,0 +1,111 @@
+# Kong OSS, DB-less declarative config (ADR-008).
+# Routes keep the /v1 prefix (strip_path: false): services should use app.setGlobalPrefix('v1').
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: profiles-service
+    url: http://profiles-service:3000
+    routes:
+      - name: profiles
+        paths: [/v1/customers, /v1/drivers, /v1/assignments]
+        strip_path: false
+
+  # Longer prefix wins over /v1/drivers, so this goes to GPS Ingestion, not Profiles.
+  - name: gps-ingestion-api
+    url: http://gps-ingestion-api:3000
+    routes:
+      - name: gps-locations
+        paths: [/v1/drivers/me/locations]
+        methods: [POST]
+        strip_path: false
+
+  - name: orders-service
+    url: http://orders-service:3000
+    routes:
+      - name: orders
+        paths: [/v1/orders]
+        strip_path: false
+
+  # REST + SSE. No response buffering so SSE events reach the client immediately (ADR-004).
+  - name: tracking-query-service
+    url: http://tracking-query-service:3000
+    read_timeout: 3600000
+    write_timeout: 3600000
+    routes:
+      - name: tracking
+        paths: [/v1/tracking]
+        strip_path: false
+        response_buffering: false
+        request_buffering: false
+
+  - name: notification-service
+    url: http://notification-service:3000
+    routes:
+      - name: notifications
+        paths: [/v1/notifications]
+        strip_path: false
+
+# Keycloak signs tokens with the dev key from infra/keycloak/fasttrack-realm.json.
+# Kong matches the token's `iss` claim to `key` and checks the RS256 signature + exp.
+# Role checks (CUSTOMER/DRIVER/OPERATIONS -> 403) are done inside each service.
+consumers:
+  - username: keycloak-fasttrack
+    jwt_secrets:
+      - key: http://localhost:8080/realms/fasttrack
+        algorithm: RS256
+        rsa_public_key: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnlwlO4Rw8nSahbqTxKXl
+          IPPMTsEbBIegtRsKFr2Ti6FWAeRMTso9foS2nyODX3ebSGe/ITn7jiw/4x/pTgT7
+          7SHiKf2wVTvXZUs7ybQSOKd2BQux+oPb3Cjjh6bWH/LJtWOoyFKUfRO4vScSUsfo
+          V+1CvI7PMkWI3p0LCeSoq4fMN1S2zqfTpEmG//qQzlPqB2yG1UH1/I6YzvlH9vgs
+          nNFdHOsAwhbY0/qoxLBGwzBknOmfJOeGhPzxBlCfrEBLAtrHXvnPGF26P6ltajV6
+          IyoQ8FI0XElU54If0QrpyIxnH/sb5GCdL77YGeVd+euulqF8QG6LynI+tg+STczv
+          zQIDAQAB
+          -----END PUBLIC KEY-----
+
+plugins:
+  - name: cors
+    config:
+      origins: ["*"]
+      methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+      headers: [Authorization, Content-Type, X-Correlation-Id, Last-Event-ID]
+      exposed_headers: [X-Correlation-Id]
+      max_age: 3600
+
+  - name: jwt
+    config:
+      key_claim_name: iss
+      claims_to_verify: [exp]
+      header_names: [authorization]
+      uri_param_names: [jwt]   # EventSource cannot send headers: SSE may use ?jwt=<token>
+      run_on_preflight: false
+
+  - name: correlation-id
+    config:
+      header_name: X-Correlation-Id
+      generator: uuid
+      echo_downstream: true
+
+  # Per user: every token belongs to the same Kong consumer, so the limit is keyed
+  # by the Authorization header (one bucket per token). Counters live in Redis db 1.
+  - name: rate-limiting
+    config:
+      minute: 300
+      limit_by: header
+      header_name: Authorization
+      policy: redis
+      redis:
+        host: redis
+        port: 6379
+        database: 1
+      fault_tolerant: true
+      hide_client_headers: false
+
+  - name: prometheus
+    config:
+      status_code_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+      upstream_health_metrics: true

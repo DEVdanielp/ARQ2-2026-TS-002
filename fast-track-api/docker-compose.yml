@@ -1,0 +1,323 @@
+# FastTrack – Last-Mile Logistics · local environment
+#
+# Infrastructure only (default):
+#   docker compose up -d
+# Infrastructure + the six NestJS services:
+#   docker compose --profile apps up -d --build
+#
+# Host ports
+#   8000  Kong proxy (all public API traffic: http://localhost:8000/v1/...)
+#   8001  Kong admin API
+#   8080  Keycloak (realm "fasttrack")
+#   9092  Kafka (for tools running on the host)
+#   8085  Kafka UI
+#   5432  PostgreSQL (one database per service)
+#   6379  Redis (tracking-cache)
+#   8025  MailHog UI (SMTP on 1025)
+#   3000  Grafana · 9090 Prometheus · 3100 Loki · 3200 Tempo (OTLP 4317/4318)
+#
+# Everything here is for local development only (fixed passwords, dev keys).
+
+name: fasttrack
+
+x-app: &app
+  profiles: ["apps"]
+  restart: unless-stopped
+  networks: [fasttrack]
+  depends_on: &app-deps
+    kafka:
+      condition: service_healthy
+    kafka-init:
+      condition: service_completed_successfully
+    postgres:
+      condition: service_healthy
+
+x-app-env: &app-env
+  NODE_ENV: development
+  PORT: "3000"
+  port: "3000" # main.ts currently reads process.env.port
+  KAFKA_BROKERS: kafka:19092
+  KEYCLOAK_ISSUER: http://localhost:8080/realms/fasttrack
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+  LOG_LEVEL: info
+
+services:
+  # ───────────────────────────── Event bus ─────────────────────────────
+  kafka:
+    image: apache/kafka:3.9.1
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      CLUSTER_ID: kXleMLfdTqeZ6XwLnJue_A
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller # KRaft, no ZooKeeper (ADR-001)
+      KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false" # topics are created explicitly by kafka-init
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs # not persisted: `docker compose down` resets Kafka
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks: [fasttrack]
+
+  # Creates every topic from spec.md §5.1 (idempotent; exits when done)
+  kafka-init:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/scripts/create-topics.sh"]
+    environment:
+      BOOTSTRAP: kafka:19092
+    volumes:
+      - ./infra/kafka/create-topics.sh:/scripts/create-topics.sh:ro
+    restart: "no"
+    networks: [fasttrack]
+
+  kafka-ui:
+    image: kafbat/kafka-ui:v1.1.0
+    ports:
+      - "8085:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: fasttrack
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [fasttrack]
+
+  # ───────────────────────────── Data stores ─────────────────────────────
+  # One PostgreSQL instance with one database + one user per service (ADR-003).
+  # Each user can only connect to its own database.
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      SERVICE_DB_PASSWORD: fasttrack
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [fasttrack]
+
+  # tracking-cache: per-order read model (ADR-002, ADR-010). AOF persistence on.
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [fasttrack]
+
+  # ───────────────────────────── Edge ─────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "8080:8080"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Fixed issuer so tokens always carry iss=http://localhost:8080/realms/fasttrack,
+      # which is the value Kong uses to pick the verification key.
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./infra/keycloak/fasttrack-realm.json:/opt/keycloak/data/import/fasttrack-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [fasttrack]
+
+  # Single entry point: JWT, rate limit, correlation id, routing, SSE (ADR-008)
+  kong:
+    image: kong:3.9
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_STATUS_LISTEN: 0.0.0.0:8100 # /metrics for Prometheus
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+    volumes:
+      - ./infra/kong/kong.yml:/kong/kong.yml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [fasttrack]
+
+  # Local SMTP sink for the Email Provider (spec §1)
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    platform: linux/amd64
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks: [fasttrack]
+
+  # ───────────────────────────── Observability ─────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [fasttrack]
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports:
+      - "3100:3100"
+    networks: [fasttrack]
+
+  # Ships every container's stdout to Loki
+  promtail:
+    image: grafana/promtail:3.3.2
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - ./infra/observability/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [loki]
+    networks: [fasttrack]
+
+  # Distributed tracing (OpenTelemetry OTLP)
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./infra/observability/tempo.yml:/etc/tempo/tempo.yml:ro
+    networks: [fasttrack]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./infra/observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana-data:/var/lib/grafana
+    depends_on: [prometheus, loki, tempo]
+    networks: [fasttrack]
+
+  # ───────────────────────────── Services (profile "apps") ─────────────────────────────
+  # All six share one Dockerfile; APP selects which Nest project is built.
+  gps-ingestion-api:
+    <<: *app
+    build: { context: ., args: { APP: gps-ingestion-api } }
+    depends_on: # no database (stateless)
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: gps-ingestion-api
+
+  gps-tracking-worker:
+    <<: *app
+    build: { context: ., args: { APP: gps-tracking-worker } }
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: gps-tracking-worker
+      DATABASE_URL: postgres://tracking_db:fasttrack@postgres:5432/tracking_db
+      ETA_PROVIDER_URL: "" # empty = distance-only fallback (ADR-013)
+      NEARBY_DISTANCE_METERS: "500"
+      NEARBY_ETA_SECONDS: "300"
+
+  profiles-service:
+    <<: *app
+    build: { context: ., args: { APP: profiles-service } }
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: profiles-service
+      DATABASE_URL: postgres://profiles_db:fasttrack@postgres:5432/profiles_db
+
+  orders-service:
+    <<: *app
+    build: { context: ., args: { APP: orders-service } }
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: orders-service
+      DATABASE_URL: postgres://orders_db:fasttrack@postgres:5432/orders_db
+
+  tracking-query-service:
+    <<: *app
+    build: { context: ., args: { APP: tracking-query-service } }
+    depends_on:
+      <<: *app-deps
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: tracking-query-service
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgres://query_archive_db:fasttrack@postgres:5432/query_archive_db
+      TERMINAL_VIEW_TTL_SECONDS: "86400" # 24 h (ADR-002)
+
+  notification-service:
+    <<: *app
+    build: { context: ., args: { APP: notification-service } }
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: notification-service
+      DATABASE_URL: postgres://notifications_db:fasttrack@postgres:5432/notifications_db
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      SMTP_FROM: no-reply@fasttrack.local
+      FCM_CREDENTIALS_FILE: "" # empty = push is logged instead of sent
+
+networks:
+  fasttrack:
+    name: fasttrack
+
+volumes:
+  postgres-data:
+  redis-data:
+  grafana-data:
