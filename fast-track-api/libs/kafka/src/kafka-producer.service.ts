@@ -37,6 +37,7 @@ export interface RawKafkaMessage {
 /** Where the broker stored a published message. */
 export interface PublishResult {
   partition: number;
+  /** Present only when the client reports it. */
   offset?: string;
 }
 
@@ -172,6 +173,9 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
    */
   async send(topic: string, message: RawKafkaMessage): Promise<PublishResult> {
     const [metadata] = await this.producer.send({ topic, messages: [message] });
-    return { partition: metadata.partition, offset: metadata.offset };
+    // The client does not always report the offset; omit it rather than log `undefined`.
+    return metadata.offset === undefined
+      ? { partition: metadata.partition }
+      : { partition: metadata.partition, offset: metadata.offset };
   }
 }
