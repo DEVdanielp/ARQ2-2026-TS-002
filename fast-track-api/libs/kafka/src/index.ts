@@ -4,4 +4,5 @@
 export * from './kafka.constants.js';
 export * from './kafka.options.js';
 export * from './kafka.module.js';
+export * from './kafka-headers.js';
 export * from './kafka-producer.service.js';
