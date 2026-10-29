@@ -52,9 +52,6 @@
   "files": [],
   "references": [
     {
-      "path": "./apps/fast-track-api/tsconfig.app.json"
-    },
-    {
       "path": "./apps/gps-ingestion-api/tsconfig.app.json"
     },
     {
@@ -71,6 +68,18 @@
     },
     {
       "path": "./apps/notification-service/tsconfig.app.json"
+    },
+    {
+      "path": "./libs/events/tsconfig.lib.json"
+    },
+    {
+      "path": "./libs/kafka/tsconfig.lib.json"
+    },
+    {
+      "path": "./libs/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "./libs/outbox/tsconfig.lib.json"
     }
   ]
 }
