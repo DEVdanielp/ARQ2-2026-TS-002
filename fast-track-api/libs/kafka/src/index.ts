@@ -1,2 +1,7 @@
+/**
+ * Public API of `@libs/kafka`. See libs/kafka/README.md for usage.
+ */
+export * from './kafka.constants.js';
+export * from './kafka.options.js';
 export * from './kafka.module.js';
-export * from './kafka.service.js';
+export * from './kafka-producer.service.js';
