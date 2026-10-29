@@ -1,11 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/nest-cli",
   "collection": "@nestjs/schematics",
-  "sourceRoot": "apps/fast-track-api/src",
+  "sourceRoot": "apps/gps-ingestion-api/src",
   "compilerOptions": {
     "deleteOutDir": true,
     "builder": "rspack",
-    "tsConfigPath": "apps/fast-track-api/tsconfig.app.json"
+    "tsConfigPath": "apps/gps-ingestion-api/tsconfig.app.json"
   },
   "projects": {
     "events": {
@@ -15,15 +15,6 @@
       "sourceRoot": "libs/events/src",
       "compilerOptions": {
         "tsConfigPath": "libs/events/tsconfig.lib.json"
-      }
-    },
-    "fast-track-api": {
-      "type": "application",
-      "root": "apps/fast-track-api",
-      "entryFile": "main",
-      "sourceRoot": "apps/fast-track-api/src",
-      "compilerOptions": {
-        "tsConfigPath": "apps/fast-track-api/tsconfig.app.json"
       }
     },
     "gps-ingestion-api": {
@@ -109,5 +100,5 @@
     }
   },
   "monorepo": true,
-  "root": "apps/fast-track-api"
+  "root": "apps/gps-ingestion-api"
 }
