@@ -9,7 +9,8 @@
  *
  *   @Module({ imports: [KafkaModule.forRoot({ clientId: 'orders-service' })] })
  *
- * and then injects `KafkaProducerService` (to publish) wherever it needs it.
+ * and then injects `KafkaProducerService` (to publish) or `KafkaConsumerService`
+ * (to subscribe) wherever it needs them.
  *
  * One client per service
  * ----------------------
@@ -18,6 +19,8 @@
  * the same instance. One producer per process is what Kafka recommends: a
  * producer is thread-safe, batches messages internally, and each extra
  * producer means extra TCP connections and memory on both sides.
+ * Consumers are different: each `subscribe()` call creates its own consumer
+ * (a consumer belongs to exactly one consumer group), all from the same client.
  *
  * About the client library
  * ------------------------
@@ -34,6 +37,7 @@ import {
   type KafkaModuleOptions,
   type ResolvedKafkaOptions,
 } from './kafka.options.js';
+import { KafkaConsumerService } from './kafka-consumer.service.js';
 import { KafkaProducerService } from './kafka-producer.service.js';
 
 @Module({})
@@ -42,8 +46,9 @@ export class KafkaModule {
    * Registers the Kafka client for the whole application.
    *
    * The module is `global`, so feature modules can inject
-   * `KafkaProducerService` without importing `KafkaModule` again. Call
-   * `forRoot()` exactly once, in the service's root module.
+   * `KafkaProducerService` / `KafkaConsumerService` without importing
+   * `KafkaModule` again. Call `forRoot()` exactly once, in the service's root
+   * module.
    *
    * @param options - `clientId` (service name) and optional `brokers`.
    */
@@ -72,8 +77,9 @@ export class KafkaModule {
           inject: [KAFKA_OPTIONS],
         },
         KafkaProducerService,
+        KafkaConsumerService,
       ],
-      exports: [KAFKA_OPTIONS, KAFKA_CLIENT, KafkaProducerService],
+      exports: [KAFKA_OPTIONS, KAFKA_CLIENT, KafkaProducerService, KafkaConsumerService],
     };
   }
 }
