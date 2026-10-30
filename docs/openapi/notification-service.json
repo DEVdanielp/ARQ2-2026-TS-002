@@ -1,0 +1,526 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/v1/notifications/preferences": {
+      "get": {
+        "description": "Role `CUSTOMER`. Returns the defaults (push and email on, CREATED off) if never set.",
+        "operationId": "NotificationsController_getPreferences",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid JWT but the role or ownership does not allow the action",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the caller's notification preferences",
+        "tags": [
+          "Notifications"
+        ]
+      },
+      "put": {
+        "description": "Role `CUSTOMER`. The customer is always the JWT `sub`; unknown fields (e.g. `customerId`) are rejected. With `email: false` no email is sent for any notification type (F5-S5).",
+        "operationId": "NotificationsController_updatePreferences",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferencesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The stored preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body or failed validation",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid JWT but the role or ownership does not allow the action",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace the caller's notification preferences",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/v1/notifications/devices": {
+      "put": {
+        "description": "Role `CUSTOMER`. Idempotent. A token already registered by another account moves to the caller (same phone, new login).",
+        "operationId": "NotificationsController_putDevice",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDeviceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Device registered"
+          },
+          "400": {
+            "description": "Malformed body or failed validation",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid JWT but the role or ownership does not allow the action",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Register the device token used for push notifications",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/v1/notifications/orders/{orderId}": {
+      "get": {
+        "description": "Role `CUSTOMER` (only their own orders) or `OPERATIONS` (any order). One entry per notification type and channel. Another customer's order returns 404, so its existence is not revealed.",
+        "operationId": "NotificationsController_getOrderLog",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationLogEntryDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body or failed validation",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid JWT but the role or ownership does not allow the action",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found (or not visible to the caller)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delivery log of an order (support and auditing)",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "FastTrack · Notification Service",
+    "description": "Notification Service (feature **F5**). Sends push and email notifications on\n`ON_THE_WAY`, `NEARBY`, `DELIVERED` and `CANCELLED` (and `ORDER_CREATED` if\nthe customer opted in), **once per order, type and channel**; manages\npreferences and push devices; retries failed sends; alerts operations when no\ndriver could be assigned. Contract: `docs/spec.md` §4.5, §5.4, F5.\n\n### Authentication\nEvery endpoint needs `Authorization: Bearer <JWT>` issued by Keycloak. Kong\nverifies the token; the service checks the role (`realm_access.roles`) and\nalways takes the customer id from the token's `sub`.\n\n### Errors\nAll errors are `application/problem+json` (schema `ProblemDetailsDto`), with\nthe `correlationId` from `X-Correlation-Id`.\n\n### Events consumed (Kafka, consumer group `notification-service`)\n| Topic | Event | Effect |\n| --- | --- | --- |\n| `orders.events` | `OrderCreated` | remembers orderId → customerId; `ORDER_CREATED` notification only if `notifyOnCreated` |\n| `orders.events` | `OrderOnTheWay`, `OrderDelivered`, `OrderCancelled` | notification `ON_THE_WAY`, `DELIVERED`, `CANCELLED` |\n| `tracking.proximity` | `DriverNearDestination` | notification `NEARBY` (ignored after delivery/cancellation) |\n| `profile.events` | `CustomerContactUpdated` | stores name/email/phone if `aggregateVersion` is newer |\n| `assignment.events` | `AssignmentFailed` | email alert to the operations mailbox, once per event |\n| `notifications.retry` | `NotificationRetry` | retries the failed channel |\n\n### Events produced\n| Topic | Event | When |\n| --- | --- | --- |\n| `notifications.retry` | `NotificationRetry` | a send failed; published through the outbox when due (1, 5, 15 min, ADR-017) |\n| `notifications.retry.dlq` | `NotificationRetry` | the 3rd retry failed; the log entry becomes `DEAD_LETTERED` |",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "Notifications",
+      "description": "Preferences, push devices and delivery log (spec 4.5)"
+    }
+  ],
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "API Gateway (Kong)"
+    },
+    {
+      "url": "http://localhost:3020",
+      "description": "Notification Service run on the host (no Kong; see libs/auth README)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "Keycloak access token"
+      }
+    },
+    "schemas": {
+      "NotificationPreferencesDto": {
+        "type": "object",
+        "properties": {
+          "push": {
+            "type": "boolean",
+            "example": true
+          },
+          "email": {
+            "type": "boolean",
+            "example": true
+          },
+          "notifyOnCreated": {
+            "type": "boolean",
+            "example": false
+          }
+        },
+        "required": [
+          "push",
+          "email",
+          "notifyOnCreated"
+        ]
+      },
+      "UpdatePreferencesDto": {
+        "type": "object",
+        "properties": {
+          "push": {
+            "type": "boolean",
+            "example": true,
+            "description": "Receive push notifications"
+          },
+          "email": {
+            "type": "boolean",
+            "example": false,
+            "description": "Receive emails. false = no email for ANY notification type (F5-S5)"
+          },
+          "notifyOnCreated": {
+            "type": "boolean",
+            "example": false,
+            "default": false,
+            "description": "Also notify when the order is created (optional notification). PUT replaces: omitted = false"
+          }
+        },
+        "required": [
+          "push",
+          "email"
+        ]
+      },
+      "RegisterDeviceDto": {
+        "type": "object",
+        "properties": {
+          "deviceToken": {
+            "type": "string",
+            "example": "fcm:dGhpcyBpcyBhIHRva2Vu",
+            "maxLength": 4096,
+            "description": "Firebase Cloud Messaging token"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "ANDROID",
+              "IOS",
+              "WEB"
+            ],
+            "example": "ANDROID"
+          }
+        },
+        "required": [
+          "deviceToken",
+          "platform"
+        ]
+      },
+      "NotificationLogEntryDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "6f1c2b7e-0000-4000-8000-000000000001"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ORDER_CREATED",
+              "ON_THE_WAY",
+              "NEARBY",
+              "DELIVERED",
+              "CANCELLED"
+            ],
+            "example": "ON_THE_WAY"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "PUSH",
+              "EMAIL"
+            ],
+            "example": "PUSH"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "SENT",
+              "FAILED",
+              "RETRYING",
+              "DEAD_LETTERED"
+            ],
+            "example": "SENT",
+            "description": "PENDING = being sent · SENT · FAILED · RETRYING = scheduled retry (1, 5, 15 min) · DEAD_LETTERED = retries exhausted"
+          },
+          "attempts": {
+            "type": "number",
+            "example": 1,
+            "description": "Send attempts: first send + retries"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-10-18T15:05:02Z"
+          }
+        },
+        "required": [
+          "orderId",
+          "type",
+          "channel",
+          "status",
+          "attempts",
+          "sentAt"
+        ]
+      },
+      "FieldErrorDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "example": "push"
+          },
+          "message": {
+            "type": "string",
+            "example": "push must be a boolean value"
+          }
+        },
+        "required": [
+          "field",
+          "message"
+        ]
+      },
+      "ProblemDetailsDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "https://api.fasttrack.local/errors/validation"
+          },
+          "title": {
+            "type": "string",
+            "example": "Invalid request"
+          },
+          "status": {
+            "type": "number",
+            "example": 400
+          },
+          "detail": {
+            "type": "string",
+            "example": "One or more fields are invalid."
+          },
+          "instance": {
+            "type": "string",
+            "example": "/v1/notifications/preferences"
+          },
+          "correlationId": {
+            "type": "string",
+            "example": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11",
+            "description": "Copied from X-Correlation-Id"
+          },
+          "errors": {
+            "description": "Only for validation errors",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldErrorDto"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "instance"
+        ]
+      }
+    }
+  }
+}

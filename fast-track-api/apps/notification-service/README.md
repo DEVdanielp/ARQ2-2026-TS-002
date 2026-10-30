@@ -60,6 +60,32 @@ fails: `DEAD_LETTERED` (attempts = 4) and the message goes to
 an event for an order whose `OrderCreated` was not processed yet, an invalid
 payload, a database outage, or an SMTP failure while alerting operations.
 
+## API documentation (Swagger)
+
+| Where | URL |
+| --- | --- |
+| Shared Swagger UI (Docker, whole team) | <http://localhost:8090> → *Notification Service* |
+| Served by the service (host run) | <http://localhost:3020/v1/notifications/docs> (JSON: `.../docs-json`) |
+| Versioned file | [`docs/openapi/notification-service.json`](../../../docs/openapi/notification-service.json) |
+
+The document covers the 4 endpoints, request/response schemas, roles, the
+problem+json errors and a summary of the Kafka events consumed and produced.
+After changing an endpoint or DTO, regenerate the file (no database or Kafka
+needed) and commit it:
+
+```powershell
+npm run openapi:notification-service
+```
+
+*Try it out* in the shared UI: pick the Kong server, click **Authorize** and
+paste a token from Keycloak:
+
+```powershell
+(Invoke-RestMethod -Method Post "http://localhost:8180/realms/fasttrack/protocol/openid-connect/token" -Body @{ grant_type='password'; client_id='fasttrack-dev'; username='customer1'; password='password' }).access_token
+```
+
+`SWAGGER_ENABLED=false` turns off the UI served by the service.
+
 ## Configuration
 
 Validated at startup (`src/config/environment.ts`); the service refuses to

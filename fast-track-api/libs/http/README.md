@@ -28,3 +28,32 @@ Every error leaves as `application/problem+json`:
 - DTO validation: unknown fields are rejected, so clients cannot send things
   like `customerId` (identity always comes from the JWT).
 - `correlationId` is copied from the `X-Correlation-Id` header that Kong adds.
+
+## OpenAPI / Swagger
+
+```ts
+import { ApiProblemResponses, buildOpenApiDocument, setupSwagger } from '@libs/http';
+
+// controller
+@ApiTags('Orders') @ApiBearerAuth() @ApiProblemResponses(401, 403, 500)
+@Controller('orders')
+export class OrdersController {
+  @Post() @ApiOperation({ summary: 'Create an order' })
+  @ApiCreatedResponse({ type: OrderDto }) @ApiProblemResponses(400)
+  create(@Body() body: CreateOrderDto) { ... }
+}
+
+// main.ts
+const document = buildOpenApiDocument(app, { title: 'FastTrack · Orders', description: '...',
+  servers: [['http://localhost:3030', 'local run']] });
+setupSwagger(app, 'v1/orders/docs', document);   // UI + v1/orders/docs-json
+```
+
+- `ApiProblemResponses(...)` documents the error statuses with the shared
+  `ProblemDetailsDto` schema (`application/problem+json`).
+- Add `@ApiProperty` to every DTO field next to its class-validator rules.
+  The Nest CLI Swagger plugin does not run under rspack, so be explicit.
+- Export the document to `docs/openapi/<service>.json` (see the Notification
+  Service's `--openapi` flag in its `main.ts`) and add it to the `swagger-ui`
+  service's `URLS` in `docker-compose.yml`, so the whole team sees it at
+  <http://localhost:8090>.

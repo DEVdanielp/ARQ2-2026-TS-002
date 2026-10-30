@@ -28,6 +28,7 @@ FastTrack is a delivery app. Its current architecture forces the customer to com
 
 - [Especificación (spec.md)](docs/spec.md)
 - [ADRs](docs/adrs/)
+- [OpenAPI (Swagger) por servicio](docs/openapi/) · Swagger UI local: http://localhost:8090
 - [C1 - Context](docs/assets/C1-Context.drawio.png)
 - [C2 - Containers](docs/assets/C2-Containers.drawio.png)
 

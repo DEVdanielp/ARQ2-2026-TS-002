@@ -32,6 +32,7 @@ npm test                          # unit tests (vitest)
 npx tsc -p tsconfig.spec.json     # type-check the tests
 npm run build                     # build every app and lib
 npx nest build <app>              # build one app, e.g. notification-service
+npm run openapi:notification-service   # regenerate docs/openapi/notification-service.json
 ```
 
 Relative imports must end in `.js` (`"module": "nodenext"`). Add dependencies
@@ -47,6 +48,10 @@ docker compose --profile apps up -d --build notification-service   # rebuild one
 
 Ports and URLs are listed at the top of `docker-compose.yml` (Kong
 `localhost:8000`, Kafka UI `localhost:8085`, MailHog `localhost:8025`, ...).
+
+**Swagger UI** (`http://localhost:8090`): REST documentation of every service,
+read from `docs/openapi/*.json`. *Try it out* goes through Kong; use
+**Authorize** with a Keycloak token. See `libs/http/README.md` to add a service.
 
 **pgAdmin** (`http://localhost:5050`, login `admin@fasttrack.dev` / `admin`)
 comes with every service database pre-registered. Open one and enter its

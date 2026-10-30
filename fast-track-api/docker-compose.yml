@@ -13,6 +13,7 @@
 #   8085  Kafka UI
 #   5432  PostgreSQL (one database per service)
 #   5050  pgAdmin (login admin@fasttrack.dev / admin; DB passwords: fasttrack, superuser: postgres)
+#   8090  Swagger UI (REST docs of every service, from ../docs/openapi)
 #   6379  Redis (tracking-cache)
 #   8025  MailHog UI (SMTP on 1025)
 #   3000  Grafana · 9090 Prometheus · 3100 Loki · 3200 Tempo (OTLP 4317/4318)
@@ -137,6 +138,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks: [fasttrack]
+
+  # REST documentation of every service. Reads the OpenAPI files exported to
+  # ../docs/openapi (one per service); "Try it out" calls the API through Kong
+  # with a Keycloak token (Kong's CORS plugin allows the Authorization header).
+  # Add a service by exporting its file and appending it to URLS.
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.17.14
+    ports:
+      - "8090:8080"
+    environment:
+      URLS: '[{ "url": "openapi/notification-service.json", "name": "Notification Service" }]'
+      PERSIST_AUTHORIZATION: "true"
+    volumes:
+      - ../docs/openapi:/usr/share/nginx/html/openapi:ro
     networks: [fasttrack]
 
   # tracking-cache: per-order read model (ADR-002, ADR-010). AOF persistence on.
