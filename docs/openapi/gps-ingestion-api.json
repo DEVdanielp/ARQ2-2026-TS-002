@@ -1,0 +1,409 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/v1/drivers/me/locations": {
+      "post": {
+        "description": "Role `DRIVER`. The driver is always the JWT `sub` (a `driverId` in the body is rejected). The batch is validated and published to Kafka (`gps.batches`, key = driverId) as `GpsBatchReceived`; the response returns as soon as Kafka confirms it, **without processing the points** (F2-S1). The GPS Tracking Worker later processes them strictly by `sequence`: points can arrive in any order, and a retried batch never duplicates history or moves the location backward (F2-S3, F2-S4).\n\nInvalid batches (0 or more than 50 points, coordinates out of range, time without zone) return `400` and nothing is published (F2-S2). On `503` the app keeps the batch and retries it unchanged.",
+        "operationId": "LocationsController_receive",
+        "parameters": [
+          {
+            "name": "x-correlation-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "description": "Added by Kong; copied into the event",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PointBatchDto"
+              },
+              "examples": {
+                "live": {
+                  "summary": "Live tracking (spec example)",
+                  "value": {
+                    "points": [
+                      {
+                        "lat": 6.2442,
+                        "lng": -75.5812,
+                        "deviceTime": "2026-10-18T15:20:01Z",
+                        "sequence": 1041,
+                        "accuracyMeters": 8
+                      },
+                      {
+                        "lat": 6.2439,
+                        "lng": -75.5807,
+                        "deviceTime": "2026-10-18T15:20:06Z",
+                        "sequence": 1042,
+                        "accuracyMeters": 7
+                      }
+                    ]
+                  }
+                },
+                "backlog": {
+                  "summary": "Backlog after a tunnel, out of order (the worker sorts it)",
+                  "value": {
+                    "points": [
+                      {
+                        "lat": 6.2301,
+                        "lng": -75.5744,
+                        "deviceTime": "2026-10-18T15:31:10Z",
+                        "sequence": 1103,
+                        "speedKmh": 28
+                      },
+                      {
+                        "lat": 6.231,
+                        "lng": -75.5751,
+                        "deviceTime": "2026-10-18T15:31:00Z",
+                        "sequence": 1101,
+                        "speedKmh": 30
+                      },
+                      {
+                        "lat": 6.2305,
+                        "lng": -75.5747,
+                        "deviceTime": "2026-10-18T15:31:05Z",
+                        "sequence": 1102,
+                        "speedKmh": 29
+                      }
+                    ]
+                  }
+                },
+                "invalid": {
+                  "summary": "Invalid: latitude out of range (400)",
+                  "value": {
+                    "points": [
+                      {
+                        "lat": 91.5,
+                        "lng": -75.5812,
+                        "deviceTime": "2026-10-18T15:20:01Z",
+                        "sequence": 1041
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Batch published for processing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchAcceptedDto"
+                },
+                "example": {
+                  "batchId": "5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9",
+                  "accepted": 2
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid batch: wrong size, coordinates, time or unknown field (nothing is published)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "example": {
+                  "type": "https://api.fasttrack.local/errors/validation",
+                  "title": "Invalid request",
+                  "status": 400,
+                  "detail": "One or more fields are invalid.",
+                  "instance": "/v1/drivers/me/locations",
+                  "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11",
+                  "errors": [
+                    {
+                      "field": "points",
+                      "message": "A batch must contain between 1 and 50 points"
+                    },
+                    {
+                      "field": "points.3.lat",
+                      "message": "lat must not be greater than 90"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid JWT but the role or ownership does not allow the action",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Kafka did not confirm the batch: keep it and retry it unchanged",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "example": {
+                  "type": "https://api.fasttrack.local/errors/event-bus-unavailable",
+                  "title": "Event bus unavailable",
+                  "status": 503,
+                  "detail": "An unexpected error occurred.",
+                  "instance": "/v1/drivers/me/locations",
+                  "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a batch of 1–50 GPS points",
+        "tags": [
+          "GPS"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "FastTrack · GPS Ingestion API",
+    "description": "GPS Ingestion API (feature **F2**). Receives batches of 1–50 GPS points from the\ndriver app, validates them and publishes them to Kafka keyed by driver. Returns\n`202` as soon as Kafka confirms the write; it **never processes points** and\nhas no database. Contract: `docs/spec.md` §4.3, §5.4 (`GpsBatchReceived`), F2.\n\n### Authentication\n`Authorization: Bearer <JWT>` issued by Keycloak with role `DRIVER`. Kong\nverifies the token; the service checks the role (`realm_access.roles`) and\nalways takes the driver id from the token's `sub`.\n\n### Errors\nAll errors are `application/problem+json` (schema `ProblemDetailsDto`), with\nthe `correlationId` from `X-Correlation-Id`. Validation errors list every\ninvalid field, e.g. `points.3.lat`.\n\n| Status | When |\n| --- | --- |\n| 400 | 0 or more than 50 points, coordinates out of range, time without zone, unknown field |\n| 413 | Body larger than 64 KB |\n| 429 | Rate limit of Kong (300 requests/minute per token) |\n| 503 | Kafka did not confirm the batch: keep it and retry (duplicates are harmless) |\n\n### Event produced\n| Topic | Key | Event | Payload |\n| --- | --- | --- | --- |\n| `gps.batches` | `driverId` | `GpsBatchReceived` | `{ driverId, batchId, receivedAt, points[] }` (device times in UTC) |\n\nThe **GPS Tracking Worker** consumes it: it sorts points by `sequence`, ignores\nsequences already processed, appends them to the history and advances the last\nknown location only with a higher sequence (ADR-001, ADR-018).",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "GPS",
+      "description": "Driver location batches (spec 4.3)"
+    }
+  ],
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "API Gateway (Kong)"
+    },
+    {
+      "url": "http://localhost:3010",
+      "description": "GPS Ingestion API run on the host (no Kong; see libs/auth README)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "Keycloak access token"
+      }
+    },
+    "schemas": {
+      "GpsPointDto": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "minimum": -90,
+            "maximum": 90,
+            "example": 6.2442,
+            "description": "Latitude, WGS-84"
+          },
+          "lng": {
+            "type": "number",
+            "format": "double",
+            "minimum": -180,
+            "maximum": 180,
+            "example": -75.5812,
+            "description": "Longitude, WGS-84"
+          },
+          "deviceTime": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-10-18T15:20:01Z",
+            "description": "Time measured by the DEVICE, with a time zone. Stored and published in UTC."
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "example": 1041,
+            "description": "Monotonic per driver device. The worker processes points by sequence and ignores sequences it already processed, so a retried batch never duplicates history (values above 2^53 - 1 are rejected)."
+          },
+          "accuracyMeters": {
+            "type": "number",
+            "minimum": 0,
+            "example": 8,
+            "description": "GPS accuracy in metres"
+          },
+          "speedKmh": {
+            "type": "number",
+            "minimum": 0,
+            "example": 32.5,
+            "description": "Speed in km/h"
+          }
+        },
+        "required": [
+          "lat",
+          "lng",
+          "deviceTime",
+          "sequence"
+        ]
+      },
+      "PointBatchDto": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "Between 1 and 50 points, in any order (e.g. the backlog accumulated without signal). The worker sorts them by sequence.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GpsPointDto"
+            }
+          }
+        },
+        "required": [
+          "points"
+        ]
+      },
+      "BatchAcceptedDto": {
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9",
+            "description": "Id given to this batch"
+          },
+          "accepted": {
+            "type": "number",
+            "example": 2,
+            "description": "Number of points published for processing"
+          }
+        },
+        "required": [
+          "batchId",
+          "accepted"
+        ]
+      },
+      "FieldErrorDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "example": "push"
+          },
+          "message": {
+            "type": "string",
+            "example": "push must be a boolean value"
+          }
+        },
+        "required": [
+          "field",
+          "message"
+        ]
+      },
+      "ProblemDetailsDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "https://api.fasttrack.local/errors/validation"
+          },
+          "title": {
+            "type": "string",
+            "example": "Invalid request"
+          },
+          "status": {
+            "type": "number",
+            "example": 400
+          },
+          "detail": {
+            "type": "string",
+            "example": "One or more fields are invalid."
+          },
+          "instance": {
+            "type": "string",
+            "example": "/v1/notifications/preferences"
+          },
+          "correlationId": {
+            "type": "string",
+            "example": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11",
+            "description": "Copied from X-Correlation-Id"
+          },
+          "errors": {
+            "description": "Only for validation errors",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldErrorDto"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "instance"
+        ]
+      }
+    }
+  }
+}

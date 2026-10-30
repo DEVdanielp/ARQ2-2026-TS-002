@@ -303,7 +303,7 @@ components:
 | --- | --- | --- |
 | `profiles-db` | Profiles & Assignment | `customers`, `drivers`, `assignments`, `outbox` |
 | `orders-db` | Orders | `orders` (versioned), `processed_events`, `idempotency_keys`, `outbox` |
-| `tracking-db` | GPS Tracking Worker | `driver_routes`, `gps_points` (append-only, partitioned by month), `outbox` |
+| `tracking-db` | GPS Tracking Worker | `driver_routes` (last location per driver), `route_orders` (orders on each route, NEARBY flag), `gps_points` (append-only, partitioned by month), `processed_events`, `outbox` ([ADR-018](adrs/018-gps-tracking-state-and-late-points.md)) |
 | `tracking-cache` | Tracking Query | `tracking:view:{orderId}` (hash), Pub/Sub channel `tracking:changes` |
 | `query-archive-db` | Tracking Query | `order_snapshots`, `route_points` |
 | `notifications-db` | Notifications | `notification_log` (`UNIQUE(order_id, type, channel)`), `preferences`, `contacts`, `devices` (key `device_token`), `order_recipients` (`orderId → customerId`, from `OrderCreated`), `processed_events`, `outbox` (with `publish_after`, [ADR-017](adrs/017-delayed-notification-retries-via-outbox.md)) |
@@ -512,7 +512,9 @@ Receives a batch of 1–50 points, publishes `GpsBatchReceived` to `gps.batches`
 | --- | --- |
 | Auth | JWT, role `DRIVER` |
 | Request body | `PointBatch` |
-| Responses | `202` `{ batchId, accepted }` · `400` empty batch, more than 50 points or invalid coordinates/time · `401` · `403` · `413` payload too large · `429` · `500` · `503` Kafka unavailable (the app keeps the batch and retries) |
+| Responses | `202` `{ batchId, accepted }` · `400` empty batch, more than 50 points or invalid coordinates/time · `401` · `403` · `413` payload too large (> 64 KB) · `429` · `500` · `503` Kafka unavailable (the app keeps the batch and retries) |
+
+`deviceTime` must include a time zone (`Z` or `±hh:mm`); it is published in UTC. `503` is returned when Kafka does not confirm the batch within 5 s; retrying the same batch is safe because the worker ignores sequences already processed ([ADR-018](adrs/018-gps-tracking-state-and-late-points.md)).
 
 ```http
 POST /v1/drivers/me/locations
@@ -739,7 +741,7 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
 | Consumers | GPS Tracking Worker |
 | Topic / key | `gps.batches` / `driverId` |
 | Ordering | Per driver (partition). The worker additionally sorts points inside the batch by `sequence`. |
-| Idempotency | Points with `sequence <= lastSequence` for the driver are ignored. |
+| Idempotency | Sequences already stored for the driver are ignored. New points with `sequence <= lastSequence` (late) are appended to the history but never move the location or produce events; only points with `sequence > lastSequence` advance it ([ADR-018](adrs/018-gps-tracking-state-and-late-points.md)). |
 | Retries | 3 in-process retries, then `gps.batches.dlq`. |
 
 ```json
@@ -846,7 +848,7 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
 
 | | |
 | --- | --- |
-| Producer | GPS Tracking Worker (outbox), one event per in-progress order of the driver |
+| Producer | GPS Tracking Worker (outbox), one event per in-progress order (assigned to the driver and `ON_THE_WAY`) per processed batch, with the point of highest sequence |
 | Consumers | Tracking Query |
 | Topic / key | `tracking.locations` / `orderId` |
 | Ordering | Per order. |
@@ -874,7 +876,7 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
   "distanceMeters": 430, "etaSeconds": 260, "location": { "lat": 6.2121, "lng": -75.5701 }, "detectedAt": "2026-10-18T15:42:10Z" }
 ```
 
-`trigger` is `DISTANCE` (< 500 m) or `ETA` (< 300 s).
+`trigger` is `DISTANCE` (< 500 m) or `ETA` (< 300 s). `etaSeconds` is `null` when the ETA provider was not consulted or failed (ADR-013, ADR-018).
 
 #### `CustomerContactUpdated`
 
