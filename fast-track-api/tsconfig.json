@@ -23,6 +23,12 @@
       "node"
     ],
     "paths": {
+      "@libs/auth": [
+        "./libs/auth/src/index.ts"
+      ],
+      "@libs/auth/*": [
+        "./libs/auth/src/*"
+      ],
       "@libs/events": [
         "./libs/events/src/index.ts"
       ],
@@ -70,6 +76,9 @@
       "path": "./apps/notification-service/tsconfig.app.json"
     },
     {
+      "path": "./libs/auth/tsconfig.lib.json"
+    },
+    {
       "path": "./libs/events/tsconfig.lib.json"
     },
     {
@@ -80,6 +89,9 @@
     },
     {
       "path": "./libs/outbox/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.spec.json"
     }
   ]
 }
