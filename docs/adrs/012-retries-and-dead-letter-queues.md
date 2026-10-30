@@ -16,7 +16,7 @@ External providers (push, email, ETA) fail transiently. A blocking retry inside 
 
 ## Decision
 
-Failed notifications are published to `notifications.retry` with the attempt count; `RetryConsumer` processes them after an exponential backoff. After the maximum attempts, the event goes to a DLQ per topic for manual review.
+Failed notifications are published to `notifications.retry` with the attempt count; `RetryConsumer` processes them after an exponential backoff. After the maximum attempts, the event goes to a DLQ per topic for manual review. Because Kafka has no delayed delivery, each retry is scheduled through the outbox with `publish_after = notBefore` ([ADR-017](017-delayed-notification-retries-via-outbox.md)).
 
 ## Trade-offs
 

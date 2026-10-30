@@ -16,7 +16,7 @@ Some services need data they do not own: Notifications needs the customer's cont
 
 ## Decision
 
-Owners publish events (`CustomerContactUpdated`, `DriverAssigned`, `DriverUnassigned`) and consumers store only the fields they need. A removal (for example, `DriverUnassigned`) is replicated the same way as a creation.
+Owners publish events (`CustomerContactUpdated`, `DriverAssigned`, `DriverUnassigned`) and consumers store only the fields they need. A removal (for example, `DriverUnassigned`) is replicated the same way as a creation. The Notification Service also keeps `orderId → customerId` from `OrderCreated` (table `order_recipients`), because later order and tracking events do not carry the customer.
 
 ## Trade-offs
 

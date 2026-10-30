@@ -74,9 +74,10 @@ web_modules/
 .cache
 .parcel-cache
 
-# Next.js build output
+# Next.js build output (anchored to the root: a bare "out" would also ignore
+# every hexagonal adapters/out folder, ADR-014)
 .next
-out
+/out
 
 # Nuxt.js build / generate output
 .nuxt

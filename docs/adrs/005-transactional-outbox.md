@@ -16,7 +16,7 @@ A service that saves state and then publishes an event can fail between both ste
 
 ## Decision
 
-Use a transactional outbox in every service that publishes facts. A scheduled `OutboxRelay` reads pending rows, publishes them and marks them as sent.
+Use a transactional outbox in every service that publishes facts. A scheduled `OutboxRelay` reads pending rows, publishes them and marks them as sent. A row may carry an optional `publish_after`; the relay publishes it only once that time has passed, which is how delayed notification retries are scheduled ([ADR-017](017-delayed-notification-retries-via-outbox.md)).
 
 ## Trade-offs
 

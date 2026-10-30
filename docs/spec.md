@@ -42,7 +42,7 @@ CREATED ──PickupConfirmed (driver)──▶ ON_THE_WAY ──DeliveryConfirm
 
 ### Order fulfillment saga (choreography)
 
-The order lifecycle spans several services with separate databases, so it runs as a **saga by choreography** over Kafka ([ADR-016](adr/016-order-fulfillment-saga-choreography.md)). Each service runs a local transaction and publishes its event through the transactional outbox; there is no orchestrator, and Orders is the only service that changes the order status.
+The order lifecycle spans several services with separate databases, so it runs as a **saga by choreography** over Kafka ([ADR-016](adrs/016-order-fulfillment-saga-choreography.md)). Each service runs a local transaction and publishes its event through the transactional outbox; there is no orchestrator, and Orders is the only service that changes the order status.
 
 | # | Service | Local transaction | Publishes | Compensation |
 | --- | --- | --- | --- | --- |
@@ -277,7 +277,7 @@ components:
         orderId: { type: string, format: uuid }
         type: { $ref: '#/components/schemas/NotificationType' }
         channel: { type: string, enum: [PUSH, EMAIL] }
-        status: { type: string, enum: [SENT, FAILED, RETRYING, DEAD_LETTERED] }
+        status: { type: string, enum: [PENDING, SENT, FAILED, RETRYING, DEAD_LETTERED], description: "PENDING = row claimed, first send not finished yet" }
         attempts: { type: integer }
         sentAt: { type: string, format: date-time, nullable: true }
 
@@ -306,7 +306,7 @@ components:
 | `tracking-db` | GPS Tracking Worker | `driver_routes`, `gps_points` (append-only, partitioned by month), `outbox` |
 | `tracking-cache` | Tracking Query | `tracking:view:{orderId}` (hash), Pub/Sub channel `tracking:changes` |
 | `query-archive-db` | Tracking Query | `order_snapshots`, `route_points` |
-| `notifications-db` | Notifications | `notification_log` (`UNIQUE(order_id, type, channel)`), `preferences`, `contacts`, `devices` |
+| `notifications-db` | Notifications | `notification_log` (`UNIQUE(order_id, type, channel)`), `preferences`, `contacts`, `devices` (key `device_token`), `order_recipients` (`orderId → customerId`, from `OrderCreated`), `processed_events`, `outbox` (with `publish_after`, [ADR-017](adrs/017-delayed-notification-retries-via-outbox.md)) |
 
 ---
 
@@ -651,7 +651,7 @@ PUT /v1/notifications/devices
 
 #### `GET /notifications/orders/{orderId}`
 
-Delivery log for an order (support and auditing).
+Delivery log for an order (support and auditing). Ownership is checked against the service's local `orderId → customerId` copy (`order_recipients`); an order that is not the caller's returns `404`.
 
 | | |
 | --- | --- |
@@ -692,7 +692,7 @@ All messages use the `EventEnvelope` (section 3) as the Kafka value, serialized 
 | Delivery | **At-least-once.** Producers use `acks=all` and idempotent producers; facts are published through a transactional **outbox**. Consumers commit offsets only after processing. |
 | Ordering | Guaranteed **per key** (per partition). GPS is ordered per `driverId`; everything about one order is ordered per `orderId`. No global ordering. |
 | Idempotency | Every consumer is idempotent: by `eventId` (`processed_events`), by `(driverId, sequence)` for GPS, by `aggregateVersion` / `sequence` guards in the read model, and by `UNIQUE(order, type, channel)` for notifications. |
-| Retries | Transient consumer errors: 3 in-process retries with exponential backoff (200 ms, 1 s, 5 s), then the message goes to `<topic>.dlq`. Notifications use the `notifications.retry` topic (see `NotificationRetry`). |
+| Retries | Transient consumer errors: 3 in-process retries with exponential backoff (200 ms, 1 s, 5 s), then the message goes to `<topic>.dlq`. Notifications use the `notifications.retry` topic, with each retry scheduled through the outbox (see `NotificationRetry`, [ADR-017](adrs/017-delayed-notification-retries-via-outbox.md)). |
 | Schema evolution | Additive changes only within the same `schemaVersion`; breaking changes increase it and consumers support both during migration. |
 
 ### 5.3 AsyncAPI summary
@@ -768,7 +768,7 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
 | | |
 | --- | --- |
 | Producer | Orders Service (outbox) |
-| Consumers | Profiles & Assignment, Tracking Query, Notifications (only if `notifyOnCreated`) |
+| Consumers | Profiles & Assignment, Tracking Query, Notifications (always: stores `orderId → customerId` in `order_recipients`, because the later order and tracking events do not carry `customerId` (ADR-015); it sends the `ORDER_CREATED` notification only if `notifyOnCreated`) |
 | Topic / key | `orders.events` / `orderId` |
 | Ordering | Per order. `aggregateVersion = 1`. |
 | Idempotency | Consumers ignore an `orderId` + version already applied. |
@@ -815,7 +815,7 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
 | | |
 | --- | --- |
 | Producer | Profiles & Assignment (outbox), when no driver is assigned within 10 minutes |
-| Consumers | Tracking Query (`assignmentStatus = FAILED`), Notifications (alert to operations staff) |
+| Consumers | Tracking Query (`assignmentStatus = FAILED`), Notifications (email alert to the operations mailbox `OPS_ALERT_EMAIL`; deduplicated by `eventId` in `processed_events`, not recorded in `notification_log`) |
 | Topic / key | `assignment.events` / `orderId` |
 | Ordering | Per order. |
 | Idempotency | At most once per assignment window; consumers deduplicate by `eventId`. The order status does not change. |
@@ -895,12 +895,12 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
 
 | | |
 | --- | --- |
-| Producer | Notification Service |
-| Consumers | Notification Service (`RetryConsumer`) |
+| Producer | Notification Service (outbox row with `publish_after = notBefore`, [ADR-017](adrs/017-delayed-notification-retries-via-outbox.md)) |
+| Consumers | Notification Service (`RetryConsumer`); the message arrives when it is due, so the consumer retries immediately and never waits |
 | Topic / key | `notifications.retry` / `orderId` |
 | Ordering | Not required (notification order is not a business rule). |
 | Idempotency | `UNIQUE(order, type, channel)` in the notification log; a notification already `SENT` is skipped. |
-| Retries | Exponential backoff (1 min, 5 min, 15 min). After 3 attempts the message goes to `notifications.retry.dlq` and the log entry is marked `DEAD_LETTERED`. |
+| Retries | Exponential backoff (1 min, 5 min, 15 min) after the first failed send, i.e. up to 3 retries. When the 3rd retry fails, the message goes to `notifications.retry.dlq` and the log entry is marked `DEAD_LETTERED`. The log update and the next retry (or the DLQ message) are written in one transaction through the outbox. |
 
 ```json
 { "orderId": "6f1c2b7e-…", "customerId": "3c9f8a2e-…", "type": "NEARBY", "channel": "PUSH",
