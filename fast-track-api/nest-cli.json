@@ -8,6 +8,15 @@
     "tsConfigPath": "apps/gps-ingestion-api/tsconfig.app.json"
   },
   "projects": {
+    "auth": {
+      "type": "library",
+      "root": "libs/auth",
+      "entryFile": "index",
+      "sourceRoot": "libs/auth/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/auth/tsconfig.lib.json"
+      }
+    },
     "events": {
       "type": "library",
       "root": "libs/events",
