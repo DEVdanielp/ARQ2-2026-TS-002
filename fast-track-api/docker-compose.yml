@@ -149,7 +149,7 @@ services:
     ports:
       - "8090:8080"
     environment:
-      URLS: '[{ "url": "openapi/notification-service.json", "name": "Notification Service" }]'
+      URLS: '[{ "url": "openapi/notification-service.json", "name": "Notification Service" }, { "url": "openapi/gps-ingestion-api.json", "name": "GPS Ingestion API" }]'
       PERSIST_AUTHORIZATION: "true"
     volumes:
       - ../docs/openapi:/usr/share/nginx/html/openapi:ro
@@ -304,9 +304,10 @@ services:
       <<: *app-env
       OTEL_SERVICE_NAME: gps-tracking-worker
       DATABASE_URL: postgres://tracking_db:fasttrack@postgres:5432/tracking_db
-      ETA_PROVIDER_URL: "" # empty = distance-only fallback (ADR-013)
+      ETA_PROVIDER_URL: "" # empty = distance-only fallback (ADR-013); contract in ADR-018
       NEARBY_DISTANCE_METERS: "500"
       NEARBY_ETA_SECONDS: "300"
+      # Optional, ADR-013 defaults: ETA_LOOKUP_RADIUS_METERS=3000, ETA_MIN_INTERVAL_SECONDS=60, ETA_TIMEOUT_MS=2000
 
   profiles-service:
     <<: *app

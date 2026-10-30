@@ -6,3 +6,4 @@
  */
 export * from './event-envelope.js';
 export * from './topics.js';
+export * from './gps-events.js';

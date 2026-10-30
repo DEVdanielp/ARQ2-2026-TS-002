@@ -8,13 +8,13 @@ libraries. The contract is [`docs/spec.md`](../docs/spec.md); decisions are in
 
 | Path | What |
 | --- | --- |
-| `apps/gps-ingestion-api` | F2: receives GPS batches, publishes `GpsBatchReceived` |
-| `apps/gps-tracking-worker` | F2/F5: processes GPS in order, detects NEARBY |
+| `apps/gps-ingestion-api` | F2: receives GPS batches, publishes `GpsBatchReceived` ([README](apps/gps-ingestion-api/README.md)) |
+| `apps/gps-tracking-worker` | F2/F5: processes GPS in order, detects NEARBY ([README](apps/gps-tracking-worker/README.md)) |
 | `apps/orders-service` | F4: order state machine |
 | `apps/profiles-service` | F1: profiles and driver assignment |
 | `apps/tracking-query-service` | F3: read model in Redis, REST + SSE |
 | `apps/notification-service` | F5: push/email notifications ([README](apps/notification-service/README.md)) |
-| `libs/events` | `EventEnvelope`, `createEnvelope`, topic names (`Topics`, `dlqTopic`) |
+| `libs/events` | `EventEnvelope`, `createEnvelope`, topic names (`Topics`, `dlqTopic`), GPS event payloads |
 | `libs/kafka` | producer/consumer with retries and DLQ ([README](libs/kafka/README.md)) |
 | `libs/auth` | caller identity and role checks ([README](libs/auth/README.md)) |
 | `libs/http` | problem+json errors and request validation (spec §2) ([README](libs/http/README.md)) |
@@ -29,10 +29,12 @@ Each service follows a hexagonal structure (ADR-014): `domain/`,
 ```powershell
 npm install                       # once
 npm test                          # unit tests (vitest)
+npm run test:e2e                  # integration tests (*.e2e-spec.ts); the GPS worker's need TEST_DATABASE_URL
 npx tsc -p tsconfig.spec.json     # type-check the tests
 npm run build                     # build every app and lib
 npx nest build <app>              # build one app, e.g. notification-service
 npm run openapi:notification-service   # regenerate docs/openapi/notification-service.json
+npm run openapi:gps-ingestion-api      # regenerate docs/openapi/gps-ingestion-api.json
 ```
 
 Relative imports must end in `.js` (`"module": "nodenext"`). Add dependencies

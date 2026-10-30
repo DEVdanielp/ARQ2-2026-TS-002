@@ -106,5 +106,7 @@ must look at it, fix the cause, and replay it if needed.
 To see it in **Kafka UI** (<http://localhost:8085>): *Topics* → `gps.batches.dlq`
 → *Messages*. Click a message to see its value and *Headers*.
 
-Try it with the demo: run `gps-tracking-worker` with `DEMO_FAIL_HANDLER=true`
-and call `POST /demo/gps-batch` on `gps-ingestion-api`.
+Try it with the GPS services: publish a `GpsBatchReceived` with an invalid
+payload (e.g. `"driverId": "not-a-uuid"`) to `gps.batches` from Kafka UI while
+`gps-tracking-worker` runs; after the retries it lands in `gps.batches.dlq`.
+(Stopping PostgreSQL has the same effect for every batch.)
