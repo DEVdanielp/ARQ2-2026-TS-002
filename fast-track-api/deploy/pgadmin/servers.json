@@ -1,0 +1,58 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "notifications_db",
+      "Group": "FastTrack services",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "notifications_db",
+      "Username": "notifications_db",
+      "SSLMode": "prefer"
+    },
+    "2": {
+      "Name": "orders_db",
+      "Group": "FastTrack services",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "orders_db",
+      "Username": "orders_db",
+      "SSLMode": "prefer"
+    },
+    "3": {
+      "Name": "profiles_db",
+      "Group": "FastTrack services",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "profiles_db",
+      "Username": "profiles_db",
+      "SSLMode": "prefer"
+    },
+    "4": {
+      "Name": "tracking_db",
+      "Group": "FastTrack services",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "tracking_db",
+      "Username": "tracking_db",
+      "SSLMode": "prefer"
+    },
+    "5": {
+      "Name": "query_archive_db",
+      "Group": "FastTrack services",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "query_archive_db",
+      "Username": "query_archive_db",
+      "SSLMode": "prefer"
+    },
+    "6": {
+      "Name": "postgres (superuser, read-only use)",
+      "Group": "Admin",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "postgres",
+      "Username": "postgres",
+      "SSLMode": "prefer"
+    }
+  }
+}

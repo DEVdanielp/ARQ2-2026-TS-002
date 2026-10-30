@@ -35,6 +35,12 @@
       "@libs/events/*": [
         "./libs/events/src/*"
       ],
+      "@libs/http": [
+        "./libs/http/src/index.ts"
+      ],
+      "@libs/http/*": [
+        "./libs/http/src/*"
+      ],
       "@libs/kafka": [
         "./libs/kafka/src/index.ts"
       ],
@@ -80,6 +86,9 @@
     },
     {
       "path": "./libs/events/tsconfig.lib.json"
+    },
+    {
+      "path": "./libs/http/tsconfig.lib.json"
     },
     {
       "path": "./libs/kafka/tsconfig.lib.json"

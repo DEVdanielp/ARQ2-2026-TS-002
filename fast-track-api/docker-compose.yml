@@ -12,6 +12,7 @@
 #   9092  Kafka (for tools running on the host)
 #   8085  Kafka UI
 #   5432  PostgreSQL (one database per service)
+#   5050  pgAdmin (login admin@fasttrack.dev / admin; DB passwords: fasttrack, superuser: postgres)
 #   6379  Redis (tracking-cache)
 #   8025  MailHog UI (SMTP on 1025)
 #   3000  Grafana · 9090 Prometheus · 3100 Loki · 3200 Tempo (OTLP 4317/4318)
@@ -117,6 +118,25 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks: [fasttrack]
+
+  # Web UI for PostgreSQL. Every service database is pre-registered from
+  # deploy/pgadmin/servers.json (loaded only on the first start of an empty
+  # pgadmin-data volume). Passwords are asked once per server; tick "Save password".
+  pgadmin:
+    image: dpage/pgadmin4:8.14
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@fasttrack.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED: "False"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./deploy/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks: [fasttrack]
 
   # tracking-cache: per-order read model (ADR-002, ADR-010). AOF persistence on.
@@ -313,6 +333,7 @@ services:
       SMTP_PORT: "1025"
       SMTP_FROM: no-reply@fasttrack.local
       FCM_CREDENTIALS_FILE: "" # empty = push is logged instead of sent
+      OPS_ALERT_EMAIL: ops@fasttrack.local # generic mailbox for AssignmentFailed alerts
 
 networks:
   fasttrack:
@@ -320,5 +341,6 @@ networks:
 
 volumes:
   postgres-data:
+  pgadmin-data:
   redis-data:
   grafana-data:

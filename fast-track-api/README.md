@@ -1,114 +1,74 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# fast-track-api
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS monorepo with the six FastTrack microservices and their shared
+libraries. The contract is [`docs/spec.md`](../docs/spec.md); decisions are in
+[`docs/adrs`](../docs/adrs).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Layout
 
-## Description
+| Path | What |
+| --- | --- |
+| `apps/gps-ingestion-api` | F2: receives GPS batches, publishes `GpsBatchReceived` |
+| `apps/gps-tracking-worker` | F2/F5: processes GPS in order, detects NEARBY |
+| `apps/orders-service` | F4: order state machine |
+| `apps/profiles-service` | F1: profiles and driver assignment |
+| `apps/tracking-query-service` | F3: read model in Redis, REST + SSE |
+| `apps/notification-service` | F5: push/email notifications ([README](apps/notification-service/README.md)) |
+| `libs/events` | `EventEnvelope`, `createEnvelope`, topic names (`Topics`, `dlqTopic`) |
+| `libs/kafka` | producer/consumer with retries and DLQ ([README](libs/kafka/README.md)) |
+| `libs/auth` | caller identity and role checks ([README](libs/auth/README.md)) |
+| `libs/http` | problem+json errors and request validation (spec §2) ([README](libs/http/README.md)) |
+| `libs/outbox` | transactional outbox with delayed publication (ADR-005, ADR-017) ([README](libs/outbox/README.md)) |
+| `libs/observability` | not implemented yet |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Each service follows a hexagonal structure (ADR-014): `domain/`,
+`application/`, `adapters/in/*`, `adapters/out/*`.
 
-## Project setup
+## Everyday commands
 
-```bash
-$ npm install
+```powershell
+npm install                       # once
+npm test                          # unit tests (vitest)
+npx tsc -p tsconfig.spec.json     # type-check the tests
+npm run build                     # build every app and lib
+npx nest build <app>              # build one app, e.g. notification-service
 ```
 
-## Compile and run the project
+Relative imports must end in `.js` (`"module": "nodenext"`). Add dependencies
+to **this** `package.json`: it is the one Docker builds from.
 
-```bash
-# development
-$ npm run start
+## Local environment
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```powershell
+docker compose up -d                              # infrastructure only
+docker compose --profile apps up -d --build       # + the six services
+docker compose --profile apps up -d --build notification-service   # rebuild one
 ```
 
-## Run tests
+Ports and URLs are listed at the top of `docker-compose.yml` (Kong
+`localhost:8000`, Kafka UI `localhost:8085`, MailHog `localhost:8025`, ...).
 
-```bash
-# unit tests
-$ npm run test
+**pgAdmin** (`http://localhost:5050`, login `admin@fasttrack.dev` / `admin`)
+comes with every service database pre-registered. Open one and enter its
+password once (`fasttrack` for the service users, `postgres` for the
+superuser), ticking *Save password*. Inspect data with your service's own
+user: objects created as `postgres` are not owned by the service.
 
-# e2e tests
-$ npm run test:e2e
+To run one service on the host instead (faster feedback), start its
+dependencies with Docker, then run the built file; each service documents its
+variables in its own `.env.example`.
 
-# test coverage
-$ npm run test:cov
+## Troubleshooting
+
+**`password authentication failed for user "<service>_db"`**: the Postgres
+volume was created before `deploy/postgres/init-databases.sh` worked, and
+Postgres only runs init scripts on an empty volume. Run it once by hand:
+
+```powershell
+docker compose exec postgres bash /docker-entrypoint-initdb.d/01-init-databases.sh
 ```
 
-## Deployment
+(or `docker compose down -v` to reset all local data).
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+**A file in `adapters/out` is not tracked by git**: the root `.gitignore`
+used to ignore every folder named `out`; it now ignores only `/out`.

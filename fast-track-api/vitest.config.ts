@@ -20,5 +20,8 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    // Nest loads reflect-metadata at startup; tests need it too for decorators
+    // that read type metadata (class-transformer @Type, DI, TypeORM).
+    setupFiles: ['reflect-metadata'],
   },
 });

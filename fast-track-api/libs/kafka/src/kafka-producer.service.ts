@@ -22,7 +22,7 @@
  */
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { KafkaJS } from '@confluentinc/kafka-javascript';
-import type { EventEnvelope, Topic } from '@libs/events';
+import type { DlqTopic, EventEnvelope, Topic } from '@libs/events';
 import { KAFKA_CLIENT, KAFKA_OPTIONS } from './kafka.constants.js';
 import { KafkaHeaders, type KafkaHeaderMap } from './kafka-headers.js';
 import type { ResolvedKafkaOptions } from './kafka.options.js';
@@ -113,7 +113,9 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
   /**
    * Publishes an event to a topic and waits until the broker confirms it.
    *
-   * @param topic - one of the `Topics` constants from `@libs/events`.
+   * @param topic - one of the `Topics` constants from `@libs/events`, or a DLQ
+   *   topic from `dlqTopic()` when a service dead-letters a message on purpose
+   *   (e.g. `notifications.retry.dlq`, ADR-017).
    * @param key - partition key (e.g. `driverId` for `gps.batches`, `orderId`
    *   for order topics; see spec 5.1). REQUIRED: Kafka hashes the key to pick
    *   the partition, so all events with the same key land in the same
@@ -127,7 +129,7 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
    * @throws if the key is empty or the broker does not acknowledge the write.
    */
   async publish<TPayload>(
-    topic: Topic,
+    topic: Topic | DlqTopic,
     key: string,
     envelope: EventEnvelope<TPayload>,
   ): Promise<PublishResult> {
