@@ -301,7 +301,7 @@ components:
 
 | Database | Owner | Main tables / keys |
 | --- | --- | --- |
-| `profiles-db` | Profiles & Assignment | `customers`, `drivers`, `assignments`, `outbox` |
+| `profiles-db` | Profiles & Assignment | `customers`, `drivers`, `assignment_requests` (local copy of each order from `orders.events`: destination, status, 30 s / 10 min retry state), `assignments` (one active per order), `processed_events`, `outbox` ([ADR-019](adrs/019-driver-assignment-rules.md)) |
 | `orders-db` | Orders | `orders` (versioned), `processed_events`, `idempotency_keys`, `outbox` |
 | `tracking-db` | GPS Tracking Worker | `driver_routes` (last location per driver), `route_orders` (orders on each route, NEARBY flag), `gps_points` (append-only, partitioned by month), `processed_events`, `outbox` ([ADR-018](adrs/018-gps-tracking-state-and-late-points.md)) |
 | `tracking-cache` | Tracking Query | `tracking:view:{orderId}` (hash), Pub/Sub channel `tracking:changes` |
@@ -380,6 +380,8 @@ PUT /v1/drivers/me
 | Responses | `200` Driver · `400` invalid value · `401` · `403` · `404` driver profile missing · `409` cannot go `OFFLINE` with orders `ON_THE_WAY` · `500` |
 
 Going `OFFLINE` with orders still in `CREATED` is allowed: each of those orders is released with `DriverUnassigned` and reassigned (see the saga in section 1).
+
+A driver who is not `OFFLINE` can receive orders while their active orders are fewer than their capacity; `EN_ROUTE` only shows that they have active orders. Among eligible drivers, the one with fewest active orders is chosen, then the one who has waited longest ([ADR-019](adrs/019-driver-assignment-rules.md)).
 
 ```json
 PATCH /v1/drivers/me/availability
@@ -832,7 +834,7 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
 | | |
 | --- | --- |
 | Producer | Orders Service (outbox), after a valid transition |
-| Consumers | GPS Tracking Worker, Profiles & Assignment (Delivered, Cancelled), Tracking Query, Notifications |
+| Consumers | GPS Tracking Worker, Profiles & Assignment (OnTheWay: the driver can no longer go `OFFLINE`; Delivered, Cancelled: capacity released, [ADR-019](adrs/019-driver-assignment-rules.md)), Tracking Query, Notifications |
 | Topic / key | `orders.events` / `orderId` |
 | Ordering | Per order; `aggregateVersion` increases by 1 on every transition. |
 | Idempotency | Consumers apply an event only if its `aggregateVersion` is higher than the one they stored, so a late or duplicate event never moves an order backward. |
