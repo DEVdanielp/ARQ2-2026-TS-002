@@ -149,7 +149,7 @@ services:
     ports:
       - "8090:8080"
     environment:
-      URLS: '[{ "url": "openapi/notification-service.json", "name": "Notification Service" }, { "url": "openapi/gps-ingestion-api.json", "name": "GPS Ingestion API" }]'
+      URLS: '[{ "url": "openapi/notification-service.json", "name": "Notification Service" }, { "url": "openapi/gps-ingestion-api.json", "name": "GPS Ingestion API" }, { "url": "openapi/profiles-service.json", "name": "Profiles & Assignment Service" }]'
       PERSIST_AUTHORIZATION: "true"
     volumes:
       - ../docs/openapi:/usr/share/nginx/html/openapi:ro
@@ -316,6 +316,8 @@ services:
       <<: *app-env
       OTEL_SERVICE_NAME: profiles-service
       DATABASE_URL: postgres://profiles_db:fasttrack@postgres:5432/profiles_db
+      # Optional, spec defaults (ADR-019): ASSIGNMENT_RETRY_SECONDS=30, ASSIGNMENT_WINDOW_SECONDS=600,
+      # ASSIGNMENT_SCHEDULER_INTERVAL_MS=1000, DEFAULT_DRIVER_CAPACITY=3
 
   orders-service:
     <<: *app

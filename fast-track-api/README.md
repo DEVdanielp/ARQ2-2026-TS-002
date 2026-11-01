@@ -11,7 +11,7 @@ libraries. The contract is [`docs/spec.md`](../docs/spec.md); decisions are in
 | `apps/gps-ingestion-api` | F2: receives GPS batches, publishes `GpsBatchReceived` ([README](apps/gps-ingestion-api/README.md)) |
 | `apps/gps-tracking-worker` | F2/F5: processes GPS in order, detects NEARBY ([README](apps/gps-tracking-worker/README.md)) |
 | `apps/orders-service` | F4: order state machine |
-| `apps/profiles-service` | F1: profiles and driver assignment |
+| `apps/profiles-service` | F1: profiles and driver assignment ([README](apps/profiles-service/README.md)) |
 | `apps/tracking-query-service` | F3: read model in Redis, REST + SSE |
 | `apps/notification-service` | F5: push/email notifications ([README](apps/notification-service/README.md)) |
 | `libs/events` | `EventEnvelope`, `createEnvelope`, topic names (`Topics`, `dlqTopic`), GPS event payloads |
@@ -35,6 +35,7 @@ npm run build                     # build every app and lib
 npx nest build <app>              # build one app, e.g. notification-service
 npm run openapi:notification-service   # regenerate docs/openapi/notification-service.json
 npm run openapi:gps-ingestion-api      # regenerate docs/openapi/gps-ingestion-api.json
+npm run openapi:profiles-service       # regenerate docs/openapi/profiles-service.json
 ```
 
 Relative imports must end in `.js` (`"module": "nodenext"`). Add dependencies
