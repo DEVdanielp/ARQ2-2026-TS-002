@@ -1,0 +1,659 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/v1/tracking/{orderId}": {
+      "get": {
+        "description": "Role `CUSTOMER` (owner of the order) or `OPERATIONS`. Read from Redis, without touching PostgreSQL (F3-S1); terminal orders older than 24 h are read from the archive (F3-S5). `locationAgeSeconds` and `trackingAvailable` are computed at read time: with a location 300 s old or more, `trackingAvailable` is false and the status is unchanged (F3-S3). After this call the app follows the SSE stream instead of polling.",
+        "operationId": "TrackingController_get",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingViewDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body or failed validation",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid JWT but the role or ownership does not allow the action",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found (or not visible to the caller)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency is temporarily unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Current tracking view of an order (initial load)",
+        "tags": [
+          "Tracking"
+        ]
+      }
+    },
+    "/v1/tracking/{orderId}/stream": {
+      "get": {
+        "description": "Role `CUSTOMER` (owner) or `OPERATIONS`. Keeps a `text/event-stream` open and sends the FULL view as an `event: tracking` whenever it changes (status, location, assignment, NEARBY), with `id` = view revision. A `: heartbeat` comment is sent every 15 s. On reconnection send `Last-Event-ID`: the current view is sent only if its revision is higher. The browser `EventSource` cannot set headers, so the token may also go in `?jwt=<token>` (accepted by Kong and by the service).\n\n```\nid: 4\nevent: tracking\ndata: {\"orderId\":\"6f1c…\",\"status\":\"ON_THE_WAY\",\"version\":3,\"nearbyReached\":true,…}\n\n: heartbeat\n```",
+        "operationId": "TrackingController_stream",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "jwt",
+            "required": false,
+            "in": "query",
+            "description": "Access token, for clients that cannot send headers (EventSource)",
+            "schema": {}
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "description": "Last view revision received (on reconnection)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event stream; each `data` is a TrackingView",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingViewDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body or failed validation",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid JWT but the role or ownership does not allow the action",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found (or not visible to the caller)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency is temporarily unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Live tracking view (Server-Sent Events)",
+        "tags": [
+          "Tracking"
+        ]
+      }
+    },
+    "/v1/tracking/{orderId}/route": {
+      "get": {
+        "description": "Role `OPERATIONS`. Points received for the order (from `LocationUpdated`), ordered by `sequence`, read from the archive (`query-archive-db`). `from` / `to` filter by device time and are optional.",
+        "operationId": "TrackingController_route",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "ISO-8601 with time zone",
+            "schema": {
+              "example": "2026-10-18T15:00:00Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "ISO-8601 with time zone",
+            "schema": {
+              "example": "2026-10-18T16:00:00Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderRouteDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body or failed validation",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid JWT but the role or ownership does not allow the action",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found (or not visible to the caller)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Route audit of an order",
+        "tags": [
+          "Tracking"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "FastTrack · Tracking Query Service",
+    "description": "Tracking Query Service (feature **F3**): the CQRS read side. Builds one view\nper order in Redis from events, serves it over REST and Server-Sent Events, and\nserves the route audit from its archive. It never changes an order. Contract:\n`docs/spec.md` §4.4, §5.4, F3; ADR-002, ADR-004, ADR-010.\n\n### Authentication\nEvery endpoint needs `Authorization: Bearer <JWT>` issued by Keycloak (the SSE\nstream also accepts `?jwt=<token>`). Kong verifies the token; the service checks\nthe role (`realm_access.roles`) and that a customer only reads their own orders.\n\n### Errors\nAll errors are `application/problem+json` (schema `ProblemDetailsDto`), with\nthe `correlationId` from `X-Correlation-Id`. `503` = Redis unavailable.\n\n### Read model (tracking-cache, Redis)\nOne hash per order, `tracking:view:{orderId}`, written only through an atomic\nLua script that applies a status only with a higher `aggregateVersion` and a\nlocation only with a higher `sequence` (no regression, F3-S4). Active orders\nnever expire; `DELIVERED`/`CANCELLED` views expire after 24 h and are then\nserved from `query-archive-db` (F3-S5). Every change is announced on the Pub/Sub\nchannel `tracking:changes`, so every instance pushes it to its SSE clients.\n\n### Events consumed (Kafka, consumer group `tracking-query-service`)\n| Topic | Event | Effect on the view |\n| --- | --- | --- |\n| `orders.events` | `OrderCreated` | creates it: `CREATED`, owner, destination, `assignmentStatus = PENDING` |\n| `orders.events` | `OrderOnTheWay`, `OrderDelivered`, `OrderCancelled` | status, if `aggregateVersion` is higher; terminal -> 24 h expiry |\n| `assignment.events` | `DriverAssigned` / `DriverUnassigned` / `AssignmentFailed` | driver and `assignmentStatus` `ASSIGNED` / `PENDING` / `FAILED` |\n| `tracking.locations` | `LocationUpdated` | last location, if `sequence` is higher; point archived for the route audit |\n| `tracking.proximity` | `DriverNearDestination` | `nearbyReached = true` |\n\nInvalid payloads are retried and then parked in `<topic>.dlq` (`@libs/kafka`).\n\n### Events produced\nNone.",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "Tracking",
+      "description": "Per-order tracking view, live stream and route audit (spec 4.4)"
+    }
+  ],
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "API Gateway (Kong)"
+    },
+    {
+      "url": "http://localhost:3040",
+      "description": "Tracking Query Service run on the host (no Kong; see libs/auth README)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "Keycloak access token"
+      }
+    },
+    "schemas": {
+      "LocationDto": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "example": 6.2439,
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lng": {
+            "type": "number",
+            "example": -75.5807,
+            "minimum": -180,
+            "maximum": 180
+          }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ]
+      },
+      "DestinationDto": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "example": "Cra 43A #1-50, Medellín",
+            "maxLength": 300
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto"
+          }
+        },
+        "required": [
+          "location"
+        ]
+      },
+      "RejectedIntentDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "PICKUP_CONFIRMED",
+              "DELIVERY_CONFIRMED",
+              "CANCELLATION_REQUESTED"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "example": "Order is DELIVERED"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "type",
+          "reason",
+          "at"
+        ]
+      },
+      "TrackingViewDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "CREATED",
+              "ON_THE_WAY",
+              "DELIVERED",
+              "CANCELLED"
+            ],
+            "example": "ON_THE_WAY",
+            "description": "Never changed by a stale location"
+          },
+          "version": {
+            "type": "number",
+            "example": 3,
+            "description": "Order version (aggregateVersion of the last status event)"
+          },
+          "driverId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "example": "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d"
+          },
+          "driverName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Carlos Ruiz"
+          },
+          "assignmentStatus": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "ASSIGNED",
+              "FAILED"
+            ],
+            "example": "ASSIGNED",
+            "description": "PENDING while looking for a driver; FAILED after AssignmentFailed"
+          },
+          "destination": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DestinationDto"
+              }
+            ]
+          },
+          "lastLocation": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocationDto"
+              }
+            ]
+          },
+          "lastLocationDeviceTime": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-10-18T15:20:06Z"
+          },
+          "lastSequence": {
+            "type": "number",
+            "nullable": true,
+            "example": 1042
+          },
+          "locationAgeSeconds": {
+            "type": "number",
+            "nullable": true,
+            "example": 240,
+            "description": "Computed at read time from lastLocationDeviceTime"
+          },
+          "trackingAvailable": {
+            "type": "boolean",
+            "example": true,
+            "description": "false when there is no location or it is 300 s old or more (\"Tracking temporarily unavailable\")"
+          },
+          "nearbyReached": {
+            "type": "boolean",
+            "example": false,
+            "description": "true once DriverNearDestination was received"
+          },
+          "lastRejectedIntent": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RejectedIntentDto"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-10-18T15:20:07Z"
+          }
+        },
+        "required": [
+          "orderId",
+          "status",
+          "version",
+          "driverId",
+          "driverName",
+          "assignmentStatus",
+          "destination",
+          "lastLocation",
+          "lastLocationDeviceTime",
+          "lastSequence",
+          "locationAgeSeconds",
+          "trackingAvailable",
+          "nearbyReached",
+          "lastRejectedIntent",
+          "updatedAt"
+        ]
+      },
+      "RoutePointDto": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "example": 6.2442
+          },
+          "lng": {
+            "type": "number",
+            "example": -75.5812
+          },
+          "deviceTime": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-10-18T15:20:01Z"
+          },
+          "sequence": {
+            "type": "number",
+            "example": 1041
+          }
+        },
+        "required": [
+          "lat",
+          "lng",
+          "deviceTime",
+          "sequence"
+        ]
+      },
+      "OrderRouteDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "driverId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "points": {
+            "description": "Ordered by sequence",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoutePointDto"
+            }
+          }
+        },
+        "required": [
+          "orderId",
+          "driverId",
+          "points"
+        ]
+      },
+      "FieldErrorDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "example": "push"
+          },
+          "message": {
+            "type": "string",
+            "example": "push must be a boolean value"
+          }
+        },
+        "required": [
+          "field",
+          "message"
+        ]
+      },
+      "ProblemDetailsDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "https://api.fasttrack.local/errors/validation"
+          },
+          "title": {
+            "type": "string",
+            "example": "Invalid request"
+          },
+          "status": {
+            "type": "number",
+            "example": 400
+          },
+          "detail": {
+            "type": "string",
+            "example": "One or more fields are invalid."
+          },
+          "instance": {
+            "type": "string",
+            "example": "/v1/notifications/preferences"
+          },
+          "correlationId": {
+            "type": "string",
+            "example": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11",
+            "description": "Copied from X-Correlation-Id"
+          },
+          "errors": {
+            "description": "Only for validation errors",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldErrorDto"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "instance"
+        ]
+      }
+    }
+  }
+}
