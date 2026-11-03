@@ -1,0 +1,993 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/v1/orders": {
+      "post": {
+        "description": "Role `CUSTOMER`. Creates the order in `CREATED` and publishes `OrderCreated` through the outbox, which starts the fulfillment saga: Profiles & Assignment looks for a driver.",
+        "operationId": "OrdersController_create",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Optional. A repeated key within 24 h returns the original response without repeating the action.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order created",
+            "headers": {
+              "Location": {
+                "description": "Path of the new order",
+                "schema": {
+                  "type": "string",
+                  "example": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid destination",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/validation",
+                      "title": "Invalid request",
+                      "status": 400,
+                      "detail": "One or more fields are invalid.",
+                      "instance": "/v1/orders",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11",
+                      "errors": [
+                        {
+                          "field": "destination.location.lat",
+                          "message": "lat must not be greater than 90"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a customer",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/forbidden",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Requires one of the roles: CUSTOMER",
+                      "instance": "/v1/orders",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Same `Idempotency-Key` with a different body",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/idempotency-key-reused",
+                      "title": "Idempotency key reused",
+                      "status": 409,
+                      "detail": "Idempotency-Key 1f6e0c2a-77b1-4d0e-9a8f-2b3c4d5e6f70 was already used with a different body.",
+                      "instance": "/v1/orders",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A dependency is temporarily unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create an order",
+        "tags": [
+          "Orders"
+        ]
+      },
+      "get": {
+        "description": "A customer sees their own orders, a driver the ones assigned to them, and operations sees all. Newest first.",
+        "operationId": "OrdersController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "ON_THE_WAY",
+              "type": "string",
+              "enum": [
+                "CREATED",
+                "ON_THE_WAY",
+                "DELIVERED",
+                "CANCELLED"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Starts at 0",
+            "schema": {
+              "minimum": 0,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "size",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderPageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid filter",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/validation",
+                      "title": "Invalid request",
+                      "status": 400,
+                      "detail": "One or more fields are invalid.",
+                      "instance": "/v1/orders?status=LOST",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11",
+                      "errors": [
+                        {
+                          "field": "status",
+                          "message": "status must be one of the following values: CREATED, ON_THE_WAY, DELIVERED, CANCELLED"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid JWT but the role or ownership does not allow the action",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the caller's orders",
+        "tags": [
+          "Orders"
+        ]
+      }
+    },
+    "/v1/orders/{orderId}": {
+      "get": {
+        "description": "The `CUSTOMER` who owns it, the `DRIVER` assigned to it, or `OPERATIONS`.",
+        "operationId": "OrdersController_get",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "example": "6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body or failed validation",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not the owner, not the assigned driver",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/forbidden",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Order 6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10 is not visible to this user.",
+                      "instance": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The order does not exist",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Order 6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10 not found",
+                      "instance": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get an order",
+        "tags": [
+          "Orders"
+        ]
+      }
+    },
+    "/v1/orders/{orderId}/intents": {
+      "post": {
+        "description": "Queues the intent on `orders.intents` (key = `orderId`) and returns `202`: the state engine applies it asynchronously and in order. The result is visible in the tracking view (status change or `lastRejectedIntent`).\n\n| Intent | Who | Status |\n| --- | --- | --- |\n| `PICKUP_CONFIRMED` | assigned `DRIVER` | `CREATED` → `ON_THE_WAY` |\n| `DELIVERY_CONFIRMED` | assigned `DRIVER` | `ON_THE_WAY` → `DELIVERED` |\n| `CANCELLATION_REQUESTED` | owner `CUSTOMER` | `CREATED` → `CANCELLED` |\n| `CANCELLATION_REQUESTED` + `reason` | `OPERATIONS` | `CREATED` or `ON_THE_WAY` → `CANCELLED` |\n\nThe `403`/`409` here are fast pre-checks. The authoritative validation is done by the state engine.",
+        "operationId": "OrdersController_submit",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "example": "6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10",
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Optional. A repeated key within 24 h returns the original response without repeating the action.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitIntentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted for processing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntentAcceptedDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid type or missing reason",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/validation",
+                      "title": "Invalid request",
+                      "status": 400,
+                      "detail": "One or more fields are invalid.",
+                      "instance": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10/intents",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11",
+                      "errors": [
+                        {
+                          "field": "reason",
+                          "message": "required for OPERATIONS"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid JWT (returned by Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or ownership does not allow this intent",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "Customer cancelling after pickup": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/forbidden",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Customers cannot cancel an order that is ON_THE_WAY.",
+                      "instance": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10/intents",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  },
+                  "Driver no longer assigned": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/forbidden",
+                      "title": "Forbidden",
+                      "status": 403,
+                      "detail": "Order 6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10 is not assigned to this driver.",
+                      "instance": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10/intents",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The order does not exist",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "detail": "Order 6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10 not found",
+                      "instance": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10/intents",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "Order already terminal": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/order-terminal",
+                      "title": "Order is in a terminal state",
+                      "status": 409,
+                      "detail": "Order 6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10 is DELIVERED.",
+                      "instance": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10/intents",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  },
+                  "Key used with a different body": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/idempotency-key-reused",
+                      "title": "Idempotency key reused",
+                      "status": 409,
+                      "detail": "Idempotency-Key 1f6e0c2a-77b1-4d0e-9a8f-2b3c4d5e6f70 was already used with a different body.",
+                      "instance": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10/intents",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (Kong)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Kafka unavailable: the intent was not queued",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                },
+                "examples": {
+                  "example": {
+                    "value": {
+                      "type": "https://api.fasttrack.local/errors/unavailable",
+                      "title": "Service temporarily unavailable",
+                      "status": 503,
+                      "detail": "Kafka is temporarily unavailable; try again.",
+                      "instance": "/v1/orders/6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10/intents",
+                      "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Submit an intent",
+        "tags": [
+          "Orders"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "FastTrack · Orders Service",
+    "description": "Orders Service (feature **F4**). The state engine and source of truth of the\norder status: it receives intents over REST, queues them per order in Kafka and\napplies only valid transitions. Owns `orders-db`. Contract: `docs/spec.md`\n§1, §4.2, §5.4, F4; decisions in ADR-005, ADR-006, ADR-009 and ADR-016.\n\n### Authentication\nEvery endpoint needs `Authorization: Bearer <JWT>` issued by Keycloak. Kong\nverifies the token; the service checks the role (`realm_access.roles`) and\nalways takes the user id from the token's `sub`.\n\n### Errors\nAll errors are `application/problem+json` (schema `ProblemDetailsDto`), with\nthe `correlationId` from `X-Correlation-Id`.\n\n### Order lifecycle\n```\nCREATED ──PICKUP_CONFIRMED (driver)──▶ ON_THE_WAY ──DELIVERY_CONFIRMED (driver)──▶ DELIVERED\n   │                                       │\n   └─CANCELLATION_REQUESTED (customer)     └─CANCELLATION_REQUESTED (operations, reason required)\n                 ▼                                          ▼\n             CANCELLED ◀────────────────────────────────────┘\n```\n`DELIVERED` and `CANCELLED` are terminal. Assigning a driver is not a status,\nbut it does raise `version`.\n\n### Idempotency\n`POST /orders` and `POST /orders/{orderId}/intents` accept `Idempotency-Key`\n(UUID). A repeated key within 24 h returns the original response; the same key\nwith a different body returns `409`.\n\n### Events produced\n| Topic (key) | Event | When |\n| --- | --- | --- |\n| `orders.intents` (orderId) | `PickupConfirmed`, `DeliveryConfirmed`, `CancellationRequested` | an intent was accepted (`202`) |\n| `orders.events` (orderId) | `OrderCreated` | an order was created (outbox) |\n| `orders.events` (orderId) | `OrderOnTheWay`, `OrderDelivered`, `OrderCancelled` | a valid transition (outbox) |\n| `orders.events` (orderId) | `IntentRejected` | the state engine rejected an intent (outbox); carries `lastRejectedIntent` for the tracking view |\n\n### Events consumed (Kafka, consumer group `orders-service`)\n| Topic | Event | Effect |\n| --- | --- | --- |\n| `orders.intents` | the three intents above | the state engine applies or rejects them, one at a time per order |\n| `assignment.events` | `DriverAssigned` | records the driver; ignored unless the order is `CREATED` |\n| `assignment.events` | `DriverUnassigned` | clears the driver, whose later intents are rejected |",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "Orders",
+      "description": "Orders and their state transitions (spec 4.2)"
+    }
+  ],
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "API Gateway (Kong)"
+    },
+    {
+      "url": "http://localhost:3040",
+      "description": "Orders Service run on the host (no Kong; see libs/auth README)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "Keycloak access token"
+      }
+    },
+    "schemas": {
+      "LocationDto": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "example": 6.2088,
+            "format": "double"
+          },
+          "lng": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "example": -75.5679,
+            "format": "double"
+          }
+        },
+        "required": [
+          "lat",
+          "lng"
+        ]
+      },
+      "DestinationDto": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "example": "Cra 43A #1-50, Medellín",
+            "maxLength": 300
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto"
+          }
+        },
+        "required": [
+          "address",
+          "location"
+        ]
+      },
+      "CreateOrderDto": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/DestinationDto"
+          },
+          "notes": {
+            "type": "string",
+            "example": "Leave at reception",
+            "maxLength": 500,
+            "description": "Stored with the order; not returned in `Order`"
+          }
+        },
+        "required": [
+          "destination"
+        ]
+      },
+      "CancellationDto": {
+        "type": "object",
+        "properties": {
+          "actor": {
+            "type": "string",
+            "enum": [
+              "CUSTOMER",
+              "DRIVER",
+              "OPERATIONS",
+              "SYSTEM"
+            ],
+            "example": "OPERATIONS"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Failed delivery: recipient unreachable",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "actor"
+        ]
+      },
+      "OrderDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10"
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3c9f8a2e-1b7d-4c55-9a0e-6d2f4b1e7a10",
+            "description": "The JWT sub of the customer who created it"
+          },
+          "driverId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "example": null,
+            "description": "Null until a driver is assigned"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/DestinationDto"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "CREATED",
+              "ON_THE_WAY",
+              "DELIVERED",
+              "CANCELLED"
+            ],
+            "example": "CREATED"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1,
+            "example": 1,
+            "description": "Increases on every change, including a driver being assigned or released"
+          },
+          "cancellation": {
+            "nullable": true,
+            "example": null,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CancellationDto"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-10-18T15:01:00Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-10-18T15:01:00Z"
+          }
+        },
+        "required": [
+          "orderId",
+          "customerId",
+          "driverId",
+          "destination",
+          "status",
+          "version",
+          "cancellation",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "OrderPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderDto"
+            }
+          },
+          "page": {
+            "type": "number",
+            "example": 0
+          },
+          "size": {
+            "type": "number",
+            "example": 20
+          },
+          "total": {
+            "type": "number",
+            "example": 1,
+            "description": "Orders matching the filter"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ]
+      },
+      "SubmitIntentDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "PICKUP_CONFIRMED",
+              "DELIVERY_CONFIRMED",
+              "CANCELLATION_REQUESTED"
+            ],
+            "example": "CANCELLATION_REQUESTED"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Failed delivery: recipient unreachable",
+            "maxLength": 300,
+            "description": "Required when the caller is `OPERATIONS`"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "IntentAcceptedDto": {
+        "type": "object",
+        "properties": {
+          "intentId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "c2d4e6f8-0a1b-4c3d-9e5f-7a8b9c0d1e2f"
+          },
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "6f1c2b7e-8d4a-4f3b-9e21-0c5a7d8e9f10"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "PICKUP_CONFIRMED",
+              "DELIVERY_CONFIRMED",
+              "CANCELLATION_REQUESTED"
+            ],
+            "example": "CANCELLATION_REQUESTED"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUEUED"
+            ],
+            "example": "QUEUED",
+            "description": "Accepted for processing; not applied yet"
+          }
+        },
+        "required": [
+          "intentId",
+          "orderId",
+          "type",
+          "status"
+        ]
+      },
+      "FieldErrorDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "example": "push"
+          },
+          "message": {
+            "type": "string",
+            "example": "push must be a boolean value"
+          }
+        },
+        "required": [
+          "field",
+          "message"
+        ]
+      },
+      "ProblemDetailsDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "https://api.fasttrack.local/errors/validation"
+          },
+          "title": {
+            "type": "string",
+            "example": "Invalid request"
+          },
+          "status": {
+            "type": "number",
+            "example": 400
+          },
+          "detail": {
+            "type": "string",
+            "example": "One or more fields are invalid."
+          },
+          "instance": {
+            "type": "string",
+            "example": "/v1/notifications/preferences"
+          },
+          "correlationId": {
+            "type": "string",
+            "example": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11",
+            "description": "Copied from X-Correlation-Id"
+          },
+          "errors": {
+            "description": "Only for validation errors",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldErrorDto"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "instance"
+        ]
+      }
+    }
+  }
+}
