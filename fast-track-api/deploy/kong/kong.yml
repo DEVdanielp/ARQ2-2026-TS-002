@@ -46,7 +46,7 @@ services:
         paths: [/v1/notifications]
         strip_path: false
 
-# Keycloak signs tokens with the dev key from infra/keycloak/fasttrack-realm.json.
+# Keycloak signs tokens with the dev key from deploy/keycloak/fasttrack-realm.json.
 # Kong matches the token's `iss` claim to `key` and checks the RS256 signature + exp.
 # Role checks (CUSTOMER/DRIVER/OPERATIONS -> 403) are done inside each service.
 consumers:

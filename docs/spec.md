@@ -60,7 +60,7 @@ The order lifecycle spans several services with separate databases, so it runs a
 - **Driver goes offline before pickup:** Profiles & Assignment publishes `DriverUnassigned` for each of the driver's `CREATED` orders and restarts the assignment (ends in `DriverAssigned` or `AssignmentFailed`). Intents from the previous driver are rejected.
 - **Cancellation mid-saga:** `OrderCancelled` is the compensation event for every participant.
 
-**Consistency rules:** events of one order travel on different topics, so consumers tolerate any arrival order (status by `aggregateVersion`, assignment events for terminal orders ignored, locations by `sequence`); every step is idempotent and publishes through the outbox; compensations never delete history.
+**Consistency rules:** events of one order travel on different topics, so consumers tolerate any arrival order (status by `aggregateVersion`, assignment events for terminal orders ignored, locations by `sequence`); every step is idempotent and publishes through the outbox; compensations never delete history. One known exception: Notifications needs `OrderCreated` (for `orderId → customerId`) before it can notify; an order or proximity event that arrives first fails, is retried in-process (200 ms, 1 s, 5 s) and then goes to `<topic>.dlq`. In practice `OrderCreated` precedes those events by minutes.
 
 ---
 
@@ -68,7 +68,7 @@ The order lifecycle spans several services with separate databases, so it runs a
 
 | Topic | Rule |
 | --- | --- |
-| Base URL | All endpoints are exposed by the gateway: `http://localhost:8000` |
+| Base URL | All endpoints are exposed by the gateway under the `/v1` prefix: `http://localhost:8000/v1`. Section 4 headings omit the prefix (`GET /customers/me` is `GET /v1/customers/me`); Kong forwards it unchanged, so every service mounts its routes under `/v1`. |
 | Authentication | `Authorization: Bearer <JWT>` issued by Keycloak (RS256). The token carries `sub` (user id) and `realm_access.roles` with one of `CUSTOMER`, `DRIVER`, `OPERATIONS`. Kong rejects missing or invalid tokens with `401` before reaching any service. |
 | Identity | Services never accept a user id in the body for "me" endpoints; they use the JWT `sub`. |
 | Correlation | Kong adds `X-Correlation-Id` (UUID) to every request; services copy it into every event they publish (`correlationId`). |
@@ -78,7 +78,7 @@ The order lifecycle spans several services with separate databases, so it runs a
 | Coordinates | WGS-84 decimal degrees; `lat` ∈ [-90, 90], `lng` ∈ [-180, 180]. |
 | Content type | `application/json; charset=utf-8`, except SSE (`text/event-stream`). |
 | Errors | `application/problem+json` (RFC 7807), see below. |
-| Rate limiting | Per user, enforced by Kong. Exceeding it returns `429` with `Retry-After`. |
+| Rate limiting | Enforced by Kong: 300 requests/minute per access token (keyed by the `Authorization` header, counters in Redis), which approximates "per user" because each session holds one token. Exceeding it returns `429` with `Retry-After`. |
 
 ### Error body (all services)
 
@@ -968,5 +968,5 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
 | F5-S1 | **WHEN** a processed point places the driver less than 500 m from the destination, or the ETA is under 5 minutes, for an order in `ON_THE_WAY` **THEN** `DriverNearDestination` is published once and the customer receives a push and/or email according to their preferences. |
 | F5-S2 | **WHEN** later points keep the driver inside the proximity zone **THEN** no second NEARBY notification is sent for that order. |
 | F5-S3 | **WHEN** `OrderOnTheWay`, `OrderDelivered` or `OrderCancelled` is consumed **THEN** the customer is notified once for each type. |
-| F5-S4 | **WHEN** the push provider fails **THEN** the notification is retried with backoff through `notifications.retry`, GPS ingestion and state transitions continue unaffected, and after 3 failed attempts the message goes to the DLQ. |
+| F5-S4 | **WHEN** the push provider fails **THEN** the notification is retried with backoff through `notifications.retry`, GPS ingestion and state transitions continue unaffected, and when the 3rd retry also fails (4 attempts in total: first send + retries after 1, 5 and 15 min) the message goes to `notifications.retry.dlq` and the log entry is `DEAD_LETTERED`. |
 | F5-S5 | **WHEN** the customer has disabled email in their preferences **THEN** no email is sent for any notification type. |

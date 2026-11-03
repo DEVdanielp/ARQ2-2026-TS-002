@@ -6,8 +6,9 @@ scrape_configs:
     static_configs:
       - targets: ["kong:8100"]
 
-  # Each service exposes GET /metrics on port 3000 (prom-client).
-  # Targets show as DOWN until the service runs with `--profile apps`.
+  # PLANNED: no service exposes GET /metrics yet (libs/observability is not
+  # implemented), so these targets show as DOWN. The GPS Tracking Worker has no
+  # HTTP server today; it will need one only for /metrics.
   - job_name: services
     metrics_path: /metrics
     static_configs:

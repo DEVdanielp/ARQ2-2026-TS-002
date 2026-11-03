@@ -10,16 +10,16 @@ libraries. The contract is [`docs/spec.md`](../docs/spec.md); decisions are in
 | --- | --- |
 | `apps/gps-ingestion-api` | F2: receives GPS batches, publishes `GpsBatchReceived` ([README](apps/gps-ingestion-api/README.md)) |
 | `apps/gps-tracking-worker` | F2/F5: processes GPS in order, detects NEARBY ([README](apps/gps-tracking-worker/README.md)) |
-| `apps/orders-service` | F4: order state machine |
+| `apps/orders-service` | F4: order state machine (not implemented yet: Nest scaffold only) |
 | `apps/profiles-service` | F1: profiles and driver assignment ([README](apps/profiles-service/README.md)) |
-| `apps/tracking-query-service` | F3: read model in Redis, REST + SSE |
+| `apps/tracking-query-service` | F3: read model in Redis, REST + SSE (not implemented yet: Nest scaffold only) |
 | `apps/notification-service` | F5: push/email notifications ([README](apps/notification-service/README.md)) |
 | `libs/events` | `EventEnvelope`, `createEnvelope`, topic names (`Topics`, `dlqTopic`), GPS event payloads |
 | `libs/kafka` | producer/consumer with retries and DLQ ([README](libs/kafka/README.md)) |
 | `libs/auth` | caller identity and role checks ([README](libs/auth/README.md)) |
 | `libs/http` | problem+json errors and request validation (spec §2) ([README](libs/http/README.md)) |
 | `libs/outbox` | transactional outbox with delayed publication (ADR-005, ADR-017) ([README](libs/outbox/README.md)) |
-| `libs/observability` | not implemented yet |
+| `libs/observability` | not implemented yet: no service exposes `/metrics` or sends OTLP traces, although Prometheus, Loki, Tempo and Grafana run in Docker (container logs do reach Loki through Promtail) |
 
 Each service follows a hexagonal structure (ADR-014): `domain/`,
 `application/`, `adapters/in/*`, `adapters/out/*`.

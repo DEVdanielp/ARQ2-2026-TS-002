@@ -16,7 +16,7 @@
 #   8090  Swagger UI (REST docs of every service, from ../docs/openapi)
 #   6379  Redis (tracking-cache)
 #   8025  MailHog UI (SMTP on 1025)
-#   3000  Grafana · 9090 Prometheus · 3100 Loki · 3200 Tempo (OTLP 4317/4318)
+#   3001  Grafana · 9090 Prometheus · 3100 Loki · 3200 Tempo (OTLP 4317/4318)
 #
 # Everything here is for local development only (fixed passwords, dev keys).
 

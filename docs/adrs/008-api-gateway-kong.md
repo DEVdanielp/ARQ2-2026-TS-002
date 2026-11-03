@@ -29,7 +29,8 @@ Use Kong OSS in DB-less mode, configured from a versioned YAML file, with the JW
 ### Negatives (risks / what we lose)
 
 - New tool for the team to learn.
-- Rate-limiting counters are local per instance in DB-less mode. *Mitigation:* use the Redis policy for the rate-limiting plugin if exact limits are needed.
+- Rate-limiting counters are local per instance in DB-less mode. *Mitigation:* the rate-limiting plugin uses the Redis policy (Redis database 1), so limits are shared by every instance.
+- Every token maps to the same Kong consumer, so the limit is keyed by the `Authorization` header: it is per token, an approximation of "per user".
 
 ## Final Justification
 
