@@ -1,0 +1,623 @@
+{
+  "info": {
+    "name": "FastTrack - flujo completo (F1-F5)",
+    "description": "Prueba de punta a punta contra el entorno local (docker compose --profile apps up -d --build).\n\nEjecutar las carpetas EN ORDEN (o la colección entera con el Collection Runner). Cada petición guarda en variables de colección lo que necesitan las siguientes (tokens, orderId, driverId).\n\nUsuarios de Keycloak (dev): customer1, driver1, ops1 — contraseña `password`.\n\nContrato: docs/spec.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000/v1" },
+    { "key": "keycloakUrl", "value": "http://localhost:8180/realms/fasttrack/protocol/openid-connect/token" },
+    { "key": "password", "value": "password" },
+    { "key": "tokenCustomer", "value": "" },
+    { "key": "tokenDriver", "value": "" },
+    { "key": "tokenOps", "value": "" },
+    { "key": "driverId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "gpsSeq", "value": "" },
+    { "key": "routeFrom", "value": "" },
+    { "key": "routeTo", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Muestra el cuerpo de los errores problem+json en la consola de Postman.",
+          "if (pm.response.code >= 400) { console.log(pm.info.requestName, pm.response.code, pm.response.text()); }"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Auth (Keycloak)",
+      "description": "Obtiene un token por rol. Los tokens duran 15 min: si algo da 401, vuelve a ejecutar esta carpeta.",
+      "item": [
+        {
+          "name": "Token customer1",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('tokenCustomer', pm.response.json().access_token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "grant_type", "value": "password" },
+              { "key": "client_id", "value": "fasttrack-dev" },
+              { "key": "username", "value": "customer1" },
+              { "key": "password", "value": "{{password}}" }
+            ] },
+            "url": "{{keycloakUrl}}"
+          }
+        },
+        {
+          "name": "Token driver1",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('tokenDriver', pm.response.json().access_token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "grant_type", "value": "password" },
+              { "key": "client_id", "value": "fasttrack-dev" },
+              { "key": "username", "value": "driver1" },
+              { "key": "password", "value": "{{password}}" }
+            ] },
+            "url": "{{keycloakUrl}}"
+          }
+        },
+        {
+          "name": "Token ops1",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('tokenOps', pm.response.json().access_token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "grant_type", "value": "password" },
+              { "key": "client_id", "value": "fasttrack-dev" },
+              { "key": "username", "value": "ops1" },
+              { "key": "password", "value": "{{password}}" }
+            ] },
+            "url": "{{keycloakUrl}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Perfiles (F1)",
+      "item": [
+        {
+          "name": "PUT /customers/me (crear o actualizar perfil)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201 creado o 200 actualizado (F1-S1)', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+            "pm.test('customerId = sub del JWT', () => pm.expect(pm.response.json().customerId).to.be.a('string'));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"name\": \"Laura Gómez\", \"email\": \"laura@example.com\", \"phone\": \"+573001234567\" }" },
+            "url": "{{baseUrl}}/customers/me"
+          }
+        },
+        {
+          "name": "GET /customers/me",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/customers/me"
+          }
+        },
+        {
+          "name": "PUT /drivers/me (perfil del conductor)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201 o 200', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+            "pm.collectionVariables.set('driverId', pm.response.json().driverId);"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"name\": \"Carlos Ruiz\", \"phone\": \"+573109876543\", \"vehiclePlate\": \"ABC123\" }" },
+            "url": "{{baseUrl}}/drivers/me"
+          }
+        },
+        {
+          "name": "PATCH /drivers/me/availability → AVAILABLE",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('ya no está OFFLINE', () => pm.expect(pm.response.json().availability).to.not.eql('OFFLINE'));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"availability\": \"AVAILABLE\" }" },
+            "url": "{{baseUrl}}/drivers/me/availability"
+          }
+        },
+        {
+          "name": "PATCH /drivers/{driverId}/capacity (ops)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('capacity = 4', () => pm.expect(pm.response.json().capacity).to.eql(4));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenOps}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"capacity\": 4 }" },
+            "url": "{{baseUrl}}/drivers/{{driverId}}/capacity"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Crear orden y asignación (F4, F1, F3)",
+      "item": [
+        {
+          "name": "POST /orders (cliente)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// Idempotency-Key nuevo en cada ejecución (spec 2).",
+              "pm.variables.set('idemKey', pm.variables.replaceIn('{{$guid}}'));"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('201', () => pm.response.to.have.status(201));",
+              "pm.test('header Location', () => pm.response.to.have.header('Location'));",
+              "const o = pm.response.json();",
+              "pm.test('status CREATED, version 1', () => { pm.expect(o.status).to.eql('CREATED'); pm.expect(o.version).to.eql(1); });",
+              "pm.collectionVariables.set('orderId', o.orderId);"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idemKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"destination\": {\n    \"address\": \"Cra 43A #1-50, Medellín\",\n    \"location\": { \"lat\": 6.2088, \"lng\": -75.5679 }\n  },\n  \"notes\": \"Leave at reception\"\n}" },
+            "url": "{{baseUrl}}/orders"
+          }
+        },
+        {
+          "name": "GET /tracking/{orderId} → assignmentStatus ASSIGNED (espera 3 s)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// La asignación es asíncrona (Kafka): espera a que llegue DriverAssigned.",
+              "setTimeout(() => {}, 3000);"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const v = pm.response.json();",
+              "pm.test('asignada a driver1 (F1-S2)', () => { pm.expect(v.assignmentStatus).to.eql('ASSIGNED'); pm.expect(v.driverId).to.eql(pm.collectionVariables.get('driverId')); });",
+              "pm.test('sigue CREATED', () => pm.expect(v.status).to.eql('CREATED'));"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/tracking/{{orderId}}"
+          }
+        },
+        {
+          "name": "GET /orders/{orderId} (driver asignado)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('driverId registrado en Orders', () => pm.expect(pm.response.json().driverId).to.eql(pm.collectionVariables.get('driverId')));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "GET /assignments?orderId= (ops)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenOps}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/assignments?orderId={{orderId}}", "host": ["{{baseUrl}}"], "path": ["assignments"], "query": [{ "key": "orderId", "value": "{{orderId}}" }] }
+          }
+        },
+        {
+          "name": "GET /orders?status=CREATED (lista del cliente)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('forma { items, page, size, total }', () => pm.expect(pm.response.json()).to.have.keys('items', 'page', 'size', 'total'));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/orders?status=CREATED&page=0&size=20", "host": ["{{baseUrl}}"], "path": ["orders"], "query": [
+              { "key": "status", "value": "CREATED" }, { "key": "page", "value": "0" }, { "key": "size", "value": "20" }
+            ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. En camino (F4, F2, F5)",
+      "item": [
+        {
+          "name": "POST /intents PICKUP_CONFIRMED (driver)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('202 QUEUED (F4-S1)', () => { pm.response.to.have.status(202); pm.expect(pm.response.json().status).to.eql('QUEUED'); });"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"type\": \"PICKUP_CONFIRMED\" }" },
+            "url": "{{baseUrl}}/orders/{{orderId}}/intents"
+          }
+        },
+        {
+          "name": "GET /tracking/{orderId} → ON_THE_WAY (espera 2 s)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["setTimeout(() => {}, 2000);"] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('ON_THE_WAY con versión mayor', () => { const v = pm.response.json(); pm.expect(v.status).to.eql('ON_THE_WAY'); pm.expect(v.version).to.be.above(1); });"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/tracking/{{orderId}}"
+          }
+        },
+        {
+          "name": "POST /intents CANCELLATION_REQUESTED por cliente → 403 (F4-S4)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403: el cliente no cancela en ON_THE_WAY', () => pm.response.to.have.status(403));",
+            "pm.test('problem+json', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"type\": \"CANCELLATION_REQUESTED\" }" },
+            "url": "{{baseUrl}}/orders/{{orderId}}/intents"
+          }
+        },
+        {
+          "name": "POST /intents CANCELLATION_REQUESTED ops sin reason → 400 (F4-S5)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400: reason obligatorio para OPERATIONS', () => pm.response.to.have.status(400));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenOps}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"type\": \"CANCELLATION_REQUESTED\" }" },
+            "url": "{{baseUrl}}/orders/{{orderId}}/intents"
+          }
+        },
+        {
+          "name": "POST /drivers/me/locations — lote lejos del destino",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// sequence debe crecer entre ejecuciones (spec 5.4): se usa el reloj.",
+              "const base = Math.floor(Date.now() / 1000) * 10;",
+              "pm.collectionVariables.set('gpsSeq', base);",
+              "pm.collectionVariables.set('routeFrom', new Date(Date.now() - 60000).toISOString());",
+              "pm.variables.set('t1', new Date(Date.now() - 6000).toISOString());",
+              "pm.variables.set('t2', new Date(Date.now() - 1000).toISOString());",
+              "pm.variables.set('s1', base + 1);",
+              "pm.variables.set('s2', base + 2);"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('202 { batchId, accepted: 2 } (F2-S1)', () => { pm.response.to.have.status(202); pm.expect(pm.response.json().accepted).to.eql(2); });"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"points\": [\n  { \"lat\": 6.2439, \"lng\": -75.5807, \"deviceTime\": \"{{t2}}\", \"sequence\": {{s2}}, \"accuracyMeters\": 7 },\n  { \"lat\": 6.2442, \"lng\": -75.5812, \"deviceTime\": \"{{t1}}\", \"sequence\": {{s1}}, \"accuracyMeters\": 8 }\n] }" },
+            "url": "{{baseUrl}}/drivers/me/locations"
+          }
+        },
+        {
+          "name": "GET /tracking/{orderId} → última ubicación (espera 3 s)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["setTimeout(() => {}, 3000);"] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "const v = pm.response.json();",
+              "pm.test('ubicación = punto de mayor sequence aunque llegó desordenado (F2-S3)', () => pm.expect(v.lastSequence).to.eql(Number(pm.collectionVariables.get('gpsSeq')) + 2));",
+              "pm.test('trackingAvailable (F3-S2)', () => pm.expect(v.trackingAvailable).to.eql(true));",
+              "pm.test('todavía no NEARBY', () => pm.expect(v.nearbyReached).to.eql(false));"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/tracking/{{orderId}}"
+          }
+        },
+        {
+          "name": "POST /drivers/me/locations — lote a < 500 m (NEARBY)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "const base = Number(pm.collectionVariables.get('gpsSeq'));",
+              "pm.variables.set('s3', base + 3);",
+              "pm.variables.set('t3', new Date().toISOString());"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('202', () => pm.response.to.have.status(202));"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"points\": [ { \"lat\": 6.2100, \"lng\": -75.5685, \"deviceTime\": \"{{t3}}\", \"sequence\": {{s3}} } ] }" },
+            "url": "{{baseUrl}}/drivers/me/locations"
+          }
+        },
+        {
+          "name": "GET /tracking/{orderId} → nearbyReached (espera 3 s)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["setTimeout(() => {}, 3000);"] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('nearbyReached = true (F5-S1)', () => pm.expect(pm.response.json().nearbyReached).to.eql(true));"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/tracking/{{orderId}}"
+          }
+        },
+        {
+          "name": "GET /tracking/{orderId}/route (ops)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('routeTo', new Date(Date.now() + 60000).toISOString());"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200 con puntos ordenados por sequence', () => { pm.response.to.have.status(200); const s = pm.response.json().points.map(p => p.sequence); pm.expect(s).to.eql([...s].sort((a, b) => a - b)); });"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenOps}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/tracking/{{orderId}}/route?from={{routeFrom}}&to={{routeTo}}", "host": ["{{baseUrl}}"], "path": ["tracking", "{{orderId}}", "route"], "query": [
+              { "key": "from", "value": "{{routeFrom}}" }, { "key": "to", "value": "{{routeTo}}" }
+            ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Entrega (F4, F5)",
+      "item": [
+        {
+          "name": "POST /intents DELIVERY_CONFIRMED (driver)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('202 (F4-S2)', () => pm.response.to.have.status(202));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"type\": \"DELIVERY_CONFIRMED\" }" },
+            "url": "{{baseUrl}}/orders/{{orderId}}/intents"
+          }
+        },
+        {
+          "name": "GET /orders/{orderId} → DELIVERED (espera 2 s)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["setTimeout(() => {}, 2000);"] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('DELIVERED', () => pm.expect(pm.response.json().status).to.eql('DELIVERED'));"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "POST /intents sobre orden entregada → 409 (F4-S6)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409 order-terminal', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().type).to.include('order-terminal'); });"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenOps}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"type\": \"CANCELLATION_REQUESTED\", \"reason\": \"Prueba sobre orden terminal\" }" },
+            "url": "{{baseUrl}}/orders/{{orderId}}/intents"
+          }
+        },
+        {
+          "name": "GET /notifications/orders/{orderId} (log de envíos)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["setTimeout(() => {}, 2000);"] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const types = pm.response.json().map(e => e.type);",
+              "pm.test('ON_THE_WAY, NEARBY y DELIVERED (F5-S1, F5-S3)', () => pm.expect(types).to.include.members(['ON_THE_WAY', 'NEARBY', 'DELIVERED']));"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/notifications/orders/{{orderId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Notificaciones: preferencias y dispositivo (F5)",
+      "item": [
+        {
+          "name": "GET /notifications/preferences",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/notifications/preferences"
+          }
+        },
+        {
+          "name": "PUT /notifications/preferences",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"push\": true, \"email\": true, \"notifyOnCreated\": false }" },
+            "url": "{{baseUrl}}/notifications/preferences"
+          }
+        },
+        {
+          "name": "PUT /notifications/devices",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('204', () => pm.response.to.have.status(204));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"deviceToken\": \"fcm:postman-test-device\", \"platform\": \"ANDROID\" }" },
+            "url": "{{baseUrl}}/notifications/devices"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Casos de error",
+      "item": [
+        {
+          "name": "Sin token → 401 (Kong)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/customers/me"
+          }
+        },
+        {
+          "name": "Rol equivocado: driver crea orden → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"destination\": { \"address\": \"X\", \"location\": { \"lat\": 6.2, \"lng\": -75.5 } } }" },
+            "url": "{{baseUrl}}/orders"
+          }
+        },
+        {
+          "name": "GPS lote vacío → 400 (F2-S2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"points\": [] }" },
+            "url": "{{baseUrl}}/drivers/me/locations"
+          }
+        },
+        {
+          "name": "GPS lote de 51 puntos → 400 (F2-S2)",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "const t = new Date().toISOString();",
+              "const points = Array.from({ length: 51 }, (_, i) => ({ lat: 6.2, lng: -75.5, deviceTime: t, sequence: i }));",
+              "pm.variables.set('bigBatch', JSON.stringify({ points }));"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('400', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{{bigBatch}}" },
+            "url": "{{baseUrl}}/drivers/me/locations"
+          }
+        },
+        {
+          "name": "GPS deviceTime sin zona horaria → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenDriver}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"points\": [ { \"lat\": 6.2, \"lng\": -75.5, \"deviceTime\": \"2026-10-18T15:20:01\", \"sequence\": 1 } ] }" },
+            "url": "{{baseUrl}}/drivers/me/locations"
+          }
+        },
+        {
+          "name": "Capacidad fuera de rango (11) → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenOps}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"capacity\": 11 }" },
+            "url": "{{baseUrl}}/drivers/{{driverId}}/capacity"
+          }
+        },
+        {
+          "name": "Ruta solo para ops: cliente → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenCustomer}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/tracking/{{orderId}}/route"
+          }
+        }
+      ]
+    }
+  ]
+}
