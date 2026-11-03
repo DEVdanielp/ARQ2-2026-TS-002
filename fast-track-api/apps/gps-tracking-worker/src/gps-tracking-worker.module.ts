@@ -16,7 +16,7 @@ import { KafkaModule } from '@libs/kafka';
 import { OutboxModule } from '@libs/outbox';
 import { TRACKING_DEFAULTS, validateEnvironment, type TrackingEnvironment } from './config/environment.js';
 import { PersistenceModule } from './adapters/out/persistence/persistence.module.js';
-import { createEtaProvider } from './adapters/out/eta/eta-providers.js';
+import { createEtaProvider, type EtaProviderName } from './adapters/out/eta/eta-providers.js';
 import { GpsTrackingConsumer } from './adapters/in/kafka/gps-tracking.consumer.js';
 import { EtaProvider, TrackingSettings } from './application/ports.js';
 import { ProcessGpsBatch } from './application/process-gps-batch.js';
@@ -59,7 +59,15 @@ function setting(config: Config, key: keyof typeof TRACKING_DEFAULTS): number {
       provide: EtaProvider,
       inject: [ConfigService],
       useFactory: (config: Config) =>
-        createEtaProvider(config.get('ETA_PROVIDER_URL', { infer: true }), setting(config, 'ETA_TIMEOUT_MS')),
+        createEtaProvider({
+          provider: (config.get('ETA_PROVIDER', { infer: true }) || undefined) as EtaProviderName | undefined,
+          url: config.get('ETA_PROVIDER_URL', { infer: true }) || undefined,
+          orsApiKey: config.get('ORS_API_KEY', { infer: true }) || undefined,
+          profile: config.get('ETA_ROUTING_PROFILE', { infer: true }) || undefined,
+          timeoutMs: setting(config, 'ETA_TIMEOUT_MS'),
+          perMinute: config.get('ETA_RATE_LIMIT_PER_MINUTE', { infer: true }),
+          perDay: config.get('ETA_DAILY_QUOTA', { infer: true }),
+        }),
     },
 
     // Application layer.

@@ -1,16 +1,41 @@
-import { createEtaProvider, DistanceOnlyEtaProvider, HttpEtaProvider } from './eta-providers.js';
+import { createEtaProvider, DistanceOnlyEtaProvider, HttpEtaProvider, resolveEtaProviderName } from './eta-providers.js';
+import { ResilientEtaProvider } from './resilient-eta-provider.js';
 
 const FROM = { lat: 6.2121, lng: -75.5701 };
 const TO = { lat: 6.2088, lng: -75.5679 };
 
-describe('createEtaProvider', () => {
-  it('uses distance only when no URL is configured', () => {
-    expect(createEtaProvider('', 2000)).toBeInstanceOf(DistanceOnlyEtaProvider);
-    expect(createEtaProvider(undefined, 2000).enabled).toBe(false);
+describe('resolveEtaProviderName', () => {
+  it('keeps the previous behaviour without ETA_PROVIDER (ADR-018): URL -> http, nothing -> none', () => {
+    expect(resolveEtaProviderName({})).toBe('none');
+    expect(resolveEtaProviderName({ url: 'http://eta.local/eta' })).toBe('http');
   });
 
-  it('uses HTTP when a URL is configured', () => {
-    expect(createEtaProvider('http://eta.local/eta', 2000)).toBeInstanceOf(HttpEtaProvider);
+  it('an ORS_API_KEY alone selects openrouteservice; ETA_PROVIDER always wins', () => {
+    expect(resolveEtaProviderName({ orsApiKey: 'k' })).toBe('openrouteservice');
+    expect(resolveEtaProviderName({ provider: 'osrm', orsApiKey: 'k' })).toBe('osrm');
+    expect(resolveEtaProviderName({ provider: 'none', orsApiKey: 'k' })).toBe('none');
+  });
+});
+
+describe('createEtaProvider', () => {
+  it('uses distance only when nothing is configured', () => {
+    expect(createEtaProvider({ timeoutMs: 2000 })).toBeInstanceOf(DistanceOnlyEtaProvider);
+    expect(createEtaProvider({ timeoutMs: 2000 }).enabled).toBe(false);
+  });
+
+  it.each([
+    [{ url: 'http://eta.local/eta' }],
+    [{ provider: 'openrouteservice' as const, orsApiKey: 'k' }],
+    [{ provider: 'osrm' as const }],
+  ])('wraps every real provider in the quota guard (%o)', (config) => {
+    const provider = createEtaProvider({ ...config, timeoutMs: 2000 });
+    expect(provider).toBeInstanceOf(ResilientEtaProvider);
+    expect(provider.enabled).toBe(true);
+  });
+
+  it('refuses openrouteservice without a key and http without a URL', () => {
+    expect(() => createEtaProvider({ provider: 'openrouteservice', timeoutMs: 2000 })).toThrow(/ORS_API_KEY/);
+    expect(() => createEtaProvider({ provider: 'http', timeoutMs: 2000 })).toThrow(/ETA_PROVIDER_URL/);
   });
 });
 
