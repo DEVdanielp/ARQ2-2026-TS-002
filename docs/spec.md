@@ -24,7 +24,7 @@ FastTrack is split into microservices, one per bounded context. Services communi
 | **Tracking Query Service** | F3 | CQRS read side. Builds one view per order in Redis from events, serves it over REST and SSE, and serves route audit from its archive. | `tracking-cache` (Redis), `query-archive-db` (PostgreSQL) |
 | **Notification Service** | F5 | Sends push/email on ON_THE_WAY, NEARBY, DELIVERED and CANCELLED, once per type and order; manages preferences; retries with backoff. | `notifications-db` (PostgreSQL) |
 
-Supporting containers: **API Gateway** (Kong OSS, DB-less), **Identity Provider** (Keycloak, OIDC), **Event Bus** (Apache Kafka, KRaft). External systems: **Push Provider** (Firebase Cloud Messaging), **Email Provider** (SMTP; MailHog locally), **Maps/ETA Provider**.
+Supporting containers: **API Gateway** (Kong OSS, DB-less), **Identity Provider** (Keycloak, OIDC), **Event Bus** (Apache Kafka, KRaft). External systems: **Push Provider** (Firebase Cloud Messaging), **Email Provider** (SMTP; MailHog locally), **Maps/ETA Provider** (openrouteservice by HeiGIT, free plan; OSRM for local development; [ADR-020](adrs/020-maps-eta-provider-openrouteservice.md)).
 
 ### Order lifecycle
 

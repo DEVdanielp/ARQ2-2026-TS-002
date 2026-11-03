@@ -4,7 +4,7 @@ Processes each driver's GPS points strictly in sequence order, stores the
 append-only history, keeps the last known location, publishes it for the
 driver's orders on the way and detects proximity (NEARBY). Owns `tracking-db`.
 A pure Kafka consumer: **no HTTP API**. Contract: `docs/spec.md` §5.4, F2, F5;
-decisions: ADR-001, ADR-009, ADR-011, ADR-013, ADR-015, ADR-018.
+decisions: ADR-001, ADR-009, ADR-011, ADR-013, ADR-015, ADR-018, ADR-020.
 
 ## Structure (hexagonal, ADR-014)
 
@@ -22,7 +22,7 @@ src/
   adapters/
     in/kafka/          consumer (routes events) + payload checks
     out/persistence/   migration, SQL repositories, monthly partitions
-    out/eta/           Maps/ETA provider over HTTP, or distance only
+    out/eta/           Maps/ETA providers (openrouteservice, OSRM, generic HTTP), quota guard, or distance only
   config/              environment validation
   gps-tracking-worker.module.ts    binds every port to its implementation
 ```
@@ -100,8 +100,48 @@ Browse it in pgAdmin: <http://localhost:5050> → `tracking_db`.
 | `DATABASE_URL` | tracking-db connection string |
 | `KAFKA_BROKERS` | read by `@libs/kafka` (defaults to `localhost:9092`) |
 | `NEARBY_DISTANCE_METERS`, `NEARBY_ETA_SECONDS` | NEARBY thresholds (default 500, 300) |
-| `ETA_PROVIDER_URL` | Maps/ETA provider; empty = distance only. Contract in ADR-018 |
+| `ETA_PROVIDER` | `openrouteservice` \| `osrm` \| `http` \| `none`; empty = automatic (see below) |
+| `ORS_API_KEY` | openrouteservice key; **secret**, only in `.env` / the shell. Required with `openrouteservice` |
+| `ETA_PROVIDER_URL` | `http`: endpoint of the ADR-018 contract; `openrouteservice`/`osrm`: base URL of a self-hosted instance |
+| `ETA_ROUTING_PROFILE` | optional: `driving-car` (openrouteservice), `driving` (osrm) |
+| `ETA_RATE_LIMIT_PER_MINUTE`, `ETA_DAILY_QUOTA` | optional local caps; default = the provider's free limits (ORS 40 / 2000; OSRM 60 / none); `0` = no cap |
 | `ETA_LOOKUP_RADIUS_METERS`, `ETA_MIN_INTERVAL_SECONDS`, `ETA_TIMEOUT_MS` | optional, default 3000, 60, 2000 |
+
+## Maps/ETA provider (ADR-020)
+
+The ETA only feeds the NEARBY rule ("ETA under 5 minutes", F5-S1). It is an
+outbound adapter of the `EtaProvider` port, called by `ProcessGpsBatch`
+before the batch transaction, only within 3 km of the destination and at most
+once per minute per order (ADR-013). The worker exposes no endpoint for it.
+
+| `ETA_PROVIDER` | Adapter | Request | Use |
+| --- | --- | --- | --- |
+| `openrouteservice` | `OpenRouteServiceEtaProvider` | `POST https://api.heigit.org/openrouteservice/v2/directions/{profile}`, header `Authorization: <ORS_API_KEY>`, body `{ coordinates: [[lng,lat],[lng,lat]], instructions: false, geometry: false }` → `routes[0].summary.duration` (s) | **Selected provider** (free Standard plan: 2 000/day, 40/min) |
+| `osrm` | `OsrmEtaProvider` | `GET {base}/route/v1/{profile}/{lng},{lat};{lng},{lat}?overview=false&steps=false` → `routes[0].duration` (s) | Local development and demos without a key (public demo: non-commercial, 1 req/s) or a self-hosted OSRM |
+| `http` | `HttpEtaProvider` | `GET {url}?originLat&originLng&destinationLat&destinationLng` → `{ etaSeconds }` | Generic contract of ADR-018 (a proxy) |
+| `none` | `DistanceOnlyEtaProvider` | — | NEARBY by distance only |
+| *(empty)* | automatic | `ORS_API_KEY` set → `openrouteservice`; `ETA_PROVIDER_URL` set → `http`; else `none` | Backwards compatible |
+
+Every real provider is wrapped in `ResilientEtaProvider`:
+
+- **Quota guard.** It refuses (without calling) above the per-minute and per-24 h caps.
+- **Cool-down.** It pauses for 10 min after `401/403` (bad key) and for 60 s after `429`.
+
+**Errors.** All provider errors become `EtaProviderError` with a kind:
+
+| Kind | When |
+| --- | --- |
+| `TIMEOUT` | no answer within `ETA_TIMEOUT_MS` |
+| `NETWORK` | provider unreachable |
+| `AUTH` | `401`/`403` |
+| `QUOTA` | `429` or the local guard |
+| `NO_ROUTE` | no road route between the points (ORS 2004/2009/2010, OSRM `NoRoute`/`NoSegment`) |
+| `INVALID_RESPONSE` | `2xx` without a usable duration |
+| `UNAVAILABLE` | `5xx`/other |
+
+Whatever the kind, the batch is **not** failed or retried. The worker logs a warning ("ETA provider failed; using distance only"), records the ETA check (so the throttle applies), and NEARBY is decided by distance.
+
+**Get a free key.** Sign up at <https://openrouteservice.org>, create a token in the dashboard, then put `ORS_API_KEY=<token>` in `fast-track-api/.env` (Docker) or `apps/gps-tracking-worker/.env` (host). Both files are git-ignored. On startup the worker logs `ETA provider: openrouteservice (limits: 40 per minute, 2000 per day; ...)`; the key itself is never logged. Credit OpenStreetMap/openrouteservice wherever a route or map is shown to users.
 
 ## Run and try it
 
@@ -138,6 +178,7 @@ The integration tests run in a throw-away schema that is dropped at the end.
 | F2-S4 processed sequences ignored, no regression | `tracking.spec.ts` › F2-S4 (×2) | F2-S4; concurrent batches |
 | F2-S5 points after DELIVERED only stored | `tracking.spec.ts` › F2-S5 | F2-S5 |
 | F5-S1 NEARBY once (distance / ETA, fallback) | `tracking.spec.ts` › NEARBY; `proximity.spec.ts` | F5-S1/S2 |
+| Maps/ETA providers, quota guard, errors (ADR-020) | `adapters/out/eta/*.spec.ts` | `eta-providers.e2e-spec.ts` (live, `ETA_LIVE=1`; real ORS route with `ORS_API_KEY`) |
 | F5-S2 no second NEARBY | `tracking.spec.ts` › F5-S2 | F5-S1/S2 |
 | Cross-topic order, compensations, dedup | `tracking.spec.ts` › Monitored orders | order replication |
 | Rollback on failure | `tracking.spec.ts` › rolls everything back | — |

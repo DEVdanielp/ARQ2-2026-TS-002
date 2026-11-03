@@ -304,10 +304,16 @@ services:
       <<: *app-env
       OTEL_SERVICE_NAME: gps-tracking-worker
       DATABASE_URL: postgres://tracking_db:fasttrack@postgres:5432/tracking_db
-      ETA_PROVIDER_URL: "" # empty = distance-only fallback (ADR-013); contract in ADR-018
+      # Maps/ETA provider (ADR-020): openrouteservice | osrm | http | none; empty = automatic
+      # (ORS_API_KEY set -> openrouteservice, else ETA_PROVIDER_URL -> http, else distance only).
+      # Put ORS_API_KEY in fast-track-api/.env (git-ignored) or the shell; never in this file.
+      ETA_PROVIDER: ${ETA_PROVIDER:-}
+      ORS_API_KEY: ${ORS_API_KEY:-}
+      ETA_PROVIDER_URL: ${ETA_PROVIDER_URL:-} # http endpoint (ADR-018), or base URL of a self-hosted ORS/OSRM
       NEARBY_DISTANCE_METERS: "500"
       NEARBY_ETA_SECONDS: "300"
       # Optional, ADR-013 defaults: ETA_LOOKUP_RADIUS_METERS=3000, ETA_MIN_INTERVAL_SECONDS=60, ETA_TIMEOUT_MS=2000
+      # Optional, ADR-020: ETA_ROUTING_PROFILE (driving-car), ETA_RATE_LIMIT_PER_MINUTE (40), ETA_DAILY_QUOTA (2000)
 
   profiles-service:
     <<: *app
