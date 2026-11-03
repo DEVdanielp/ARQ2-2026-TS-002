@@ -1,27 +1,20 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { NestFactory } from '@nestjs/core';
-<<<<<<< HEAD
 import { initObservability, setupHttpObservability } from '@libs/observability';
-=======
 import {
   createValidationPipe,
   ProblemDetailsFilter,
   setupSwagger,
 } from '@libs/http';
->>>>>>> 61161971f5f5dbc3acabb1b235fc1aaeb2715aa6
 import { OrdersServiceModule } from './orders-service.module.js';
 import { buildOrdersOpenApi, SWAGGER_PATH } from './openapi.js';
 
 async function bootstrap() {
-<<<<<<< HEAD
   // JSON logs, Prometheus metrics and traces (libs/observability).
   const { logger } = initObservability('orders-service');
   const app = await NestFactory.create(OrdersServiceModule, { logger });
   setupHttpObservability(app);
-  await app.listen(process.env.PORT ?? process.env.port ?? 3000);
-=======
-  const app = await NestFactory.create(OrdersServiceModule);
   // Kong forwards the full path, /v1 included (strip_path: false in deploy/kong/kong.yml).
   app.setGlobalPrefix('v1');
   // Every error leaves as application/problem+json (spec 2).
@@ -59,5 +52,4 @@ if (openApiFlag >= 0) {
   await exportOpenApi(process.argv[openApiFlag + 1] ?? 'openapi.json');
 } else {
   await bootstrap();
->>>>>>> 61161971f5f5dbc3acabb1b235fc1aaeb2715aa6
 }
