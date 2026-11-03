@@ -71,8 +71,8 @@ export class InitialSchema1793232000000 implements MigrationInterface {
       )
     `);
 
-    // PENDING is not in the spec's status enum: it marks a row that was claimed
-    // but whose first send has not finished yet (see the README's open points).
+    // PENDING (spec 3, NotificationLogEntry.status) marks a row that was claimed
+    // but whose first send has not finished yet.
     await queryRunner.query(`
       CREATE TABLE notification_log (
         id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

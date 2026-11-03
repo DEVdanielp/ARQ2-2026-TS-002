@@ -150,7 +150,7 @@ services:
     ports:
       - "8090:8080"
     environment:
-      URLS: '[{ "url": "openapi/notification-service.json", "name": "Notification Service" }, { "url": "openapi/gps-ingestion-api.json", "name": "GPS Ingestion API" }, { "url": "openapi/profiles-service.json", "name": "Profiles & Assignment Service" }, { "url": "openapi/tracking-query-service.json", "name": "Tracking Query Service" }]'
+      URLS: '[{ "url": "openapi/notification-service.json", "name": "Notification Service" }, { "url": "openapi/gps-ingestion-api.json", "name": "GPS Ingestion API" }, { "url": "openapi/profiles-service.json", "name": "Profiles & Assignment Service" }, { "url": "openapi/orders-service.json", "name": "Orders Service" }]'
       PERSIST_AUTHORIZATION: "true"
     volumes:
       - ../docs/openapi:/usr/share/nginx/html/openapi:ro

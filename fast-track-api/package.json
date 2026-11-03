@@ -23,7 +23,8 @@
     "openapi:notification-service": "nest build notification-service && node dist/apps/notification-service/main.js --openapi ../docs/openapi/notification-service.json",
     "openapi:gps-ingestion-api": "nest build gps-ingestion-api && node dist/apps/gps-ingestion-api/main.js --openapi ../docs/openapi/gps-ingestion-api.json",
     "openapi:profiles-service": "nest build profiles-service && node --env-file=apps/profiles-service/.env.example dist/apps/profiles-service/main.js --openapi ../docs/openapi/profiles-service.json",
-    "openapi:tracking-query-service": "nest build tracking-query-service && node --env-file=apps/tracking-query-service/.env.example dist/apps/tracking-query-service/main.js --openapi ../docs/openapi/tracking-query-service.json"
+    "openapi:tracking-query-service": "nest build tracking-query-service && node --env-file=apps/tracking-query-service/.env.example dist/apps/tracking-query-service/main.js --openapi ../docs/openapi/tracking-query-service.json",
+    "openapi:orders-service": "nest build orders-service && node --env-file=apps/orders-service/.env.example dist/apps/orders-service/main.js --openapi ../docs/openapi/orders-service.json"
   },
   "dependencies": {
     "@confluentinc/kafka-javascript": "^1.11.0",

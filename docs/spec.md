@@ -98,7 +98,7 @@ The order lifecycle spans several services with separate databases, so it runs a
 
 | Code | Meaning |
 | --- | --- |
-| `400` | Malformed body or failed validation. |
+| `400` | Malformed body, failed validation, or an id in the path/query that is not a UUID. |
 | `401` | Missing, expired or invalid JWT (returned by Kong). |
 | `403` | Valid JWT but the role or ownership does not allow the action. |
 | `404` | Resource not found (or not visible to the caller). |
@@ -277,7 +277,7 @@ components:
         orderId: { type: string, format: uuid }
         type: { $ref: '#/components/schemas/NotificationType' }
         channel: { type: string, enum: [PUSH, EMAIL] }
-        status: { type: string, enum: [PENDING, SENT, FAILED, RETRYING, DEAD_LETTERED], description: "PENDING = row claimed, first send not finished yet" }
+        status: { type: string, enum: [PENDING, SENT, FAILED, RETRYING, DEAD_LETTERED], description: "PENDING = row claimed, first send not finished yet. A failed send goes straight to RETRYING (or DEAD_LETTERED after the 3rd retry); FAILED is reserved and not written by the current implementation" }
         attempts: { type: integer }
         sentAt: { type: string, format: date-time, nullable: true }
 
@@ -302,7 +302,7 @@ components:
 | Database | Owner | Main tables / keys |
 | --- | --- | --- |
 | `profiles-db` | Profiles & Assignment | `customers`, `drivers`, `assignment_requests` (local copy of each order from `orders.events`: destination, status, 30 s / 10 min retry state), `assignments` (one active per order), `processed_events`, `outbox` ([ADR-019](adrs/019-driver-assignment-rules.md)) |
-| `orders-db` | Orders | `orders` (versioned), `processed_events`, `idempotency_keys`, `outbox` |
+| `orders-db` | Orders | `orders` (versioned), `rejected_intents` (intents the state engine did not apply, with the reason), `processed_events`, `idempotency_keys`, `outbox` |
 | `tracking-db` | GPS Tracking Worker | `driver_routes` (last location per driver), `route_orders` (orders on each route, NEARBY flag), `gps_points` (append-only, partitioned by month), `processed_events`, `outbox` ([ADR-018](adrs/018-gps-tracking-state-and-late-points.md)) |
 | `tracking-cache` | Tracking Query | `tracking:view:{orderId}` (hash), Pub/Sub channel `tracking:changes` |
 | `query-archive-db` | Tracking Query | `order_snapshots`, `route_points` |
@@ -502,7 +502,7 @@ Content-Type: application/json
 { "type": "https://api.fasttrack.local/errors/order-terminal", "title": "Order is in a terminal state", "status": 409, "detail": "Order 6f1c… is DELIVERED.", "correlationId": "0b7d0c1e-3a55-4b8e-9d2b-5f0c2a9a7e11" }
 ```
 
-> The `409` pre-check is an optimization. The authoritative validation is done by the state engine when it consumes the intent; a rejection there is recorded in `TrackingView.lastRejectedIntent`.
+> The `409` pre-check is an optimization. The authoritative validation is done by the state engine when it consumes the intent; a rejection there is stored in `rejected_intents` and published as `IntentRejected` (section 5.4), which feeds `TrackingView.lastRejectedIntent`.
 
 ### 4.3 GPS Ingestion API
 
@@ -566,7 +566,7 @@ Keeps an SSE stream; sends the full view whenever it changes.
 | | |
 | --- | --- |
 | Auth | JWT; `CUSTOMER` (owner) or `OPERATIONS` |
-| Headers | `Accept: text/event-stream`; optional `Last-Event-ID` (view version) on reconnection |
+| Headers | `Accept: text/event-stream`; optional `Last-Event-ID` (view revision) on reconnection. `EventSource` cannot send headers, so the token may also go in `?jwt=<token>` (accepted by Kong and by the service). |
 | Request body | — |
 | Responses | `200` `text/event-stream` · `401` · `403` · `404` · `503` |
 
@@ -585,8 +585,9 @@ event: tracking
 data: {"orderId":"6f1c…","status":"ON_THE_WAY","version":4,"nearbyReached":true, ...}
 ```
 
+- The SSE `id` is the **view revision**, not the order `version`: the revision increases on every change applied to the view (status, location, assignment, NEARBY), while the order `version` only changes with the order. In the example above both happen to coincide.
 - A heartbeat comment is sent every 15 s.
-- On reconnection with `Last-Event-ID`, the server sends the current view if its version is higher.
+- On reconnection with `Last-Event-ID`, the server sends the current view if its revision is higher.
 
 #### `GET /tracking/{orderId}/route?from={iso}&to={iso}`
 
@@ -681,7 +682,7 @@ Delivery log for an order (support and auditing). Ownership is checked against t
 | --- | --- | --- | --- | --- |
 | `gps.batches` | `driverId` | 24 | GPS Ingestion API | `GpsBatchReceived` |
 | `orders.intents` | `orderId` | 12 | Orders Service | `PickupConfirmed`, `DeliveryConfirmed`, `CancellationRequested` |
-| `orders.events` | `orderId` | 12 | Orders Service | `OrderCreated`, `OrderOnTheWay`, `OrderDelivered`, `OrderCancelled` |
+| `orders.events` | `orderId` | 12 | Orders Service | `OrderCreated`, `OrderOnTheWay`, `OrderDelivered`, `OrderCancelled`, `IntentRejected` |
 | `assignment.events` | `orderId` | 12 | Profiles & Assignment | `DriverAssigned`, `DriverUnassigned`, `AssignmentFailed` |
 | `profile.events` | `customerId` | 6 | Profiles & Assignment | `CustomerContactUpdated` |
 | `tracking.locations` | `orderId` | 12 | GPS Tracking Worker | `LocationUpdated` |
@@ -720,7 +721,7 @@ channels:
   orders.intents:
     publish:  { message: { oneOf: [ { name: PickupConfirmed }, { name: DeliveryConfirmed }, { name: CancellationRequested } ] } }
   orders.events:
-    publish:  { message: { oneOf: [ { name: OrderCreated }, { name: OrderOnTheWay }, { name: OrderDelivered }, { name: OrderCancelled } ] } }
+    publish:  { message: { oneOf: [ { name: OrderCreated }, { name: OrderOnTheWay }, { name: OrderDelivered }, { name: OrderCancelled }, { name: IntentRejected } ] } }
   assignment.events:
     publish:  { message: { oneOf: [ { name: DriverAssigned }, { name: DriverUnassigned }, { name: AssignmentFailed } ] } }
   profile.events:
@@ -796,6 +797,8 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
 | Idempotency | By `eventId`; at most one active assignment per order. |
 | Retries | 3 in-process retries, then `assignment.events.dlq`. |
 
+Besides the normal assignment, Profiles & Assignment also publishes `DriverAssigned` when an `OrderOnTheWay` names a driver different from its active assignment: it follows Orders (the source of truth), releases its own assignment and assigns the order to that driver, so GPS Tracking and Tracking Query follow too ([ADR-019](adrs/019-driver-assignment-rules.md)). No `DriverUnassigned` is sent in that case, because consumers ignore it once the order is not `CREATED`.
+
 ```json
 { "orderId": "6f1c2b7e-…", "driverId": "9a1b2c3d-…", "driverName": "Carlos Ruiz",
   "destination": { "location": { "lat": 6.2088, "lng": -75.5679 } }, "assignedAt": "2026-10-18T15:01:10Z" }
@@ -838,7 +841,7 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
 | Producer | Orders Service (outbox), after a valid transition |
 | Consumers | GPS Tracking Worker, Profiles & Assignment (OnTheWay: the driver can no longer go `OFFLINE`; Delivered, Cancelled: capacity released, [ADR-019](adrs/019-driver-assignment-rules.md)), Tracking Query, Notifications |
 | Topic / key | `orders.events` / `orderId` |
-| Ordering | Per order; `aggregateVersion` increases by 1 on every transition. |
+| Ordering | Per order; `aggregateVersion` is the order `version`, which increases on every change of the order: transitions, and also recording or clearing the driver (`DriverAssigned` / `DriverUnassigned`), which publish no order event. Consecutive order events can therefore skip values (e.g. `OrderCreated` v1 → `OrderOnTheWay` v3). |
 | Idempotency | Consumers apply an event only if its `aggregateVersion` is higher than the one they stored, so a late or duplicate event never moves an order backward. |
 | Retries | 3 in-process retries, then `orders.events.dlq`. |
 
@@ -847,6 +850,24 @@ Every event below is wrapped in the `EventEnvelope`; only the `payload` is shown
   "driverId": "9a1b2c3d-…", "cancellation": { "actor": "OPERATIONS", "reason": "Failed delivery: recipient unreachable" },
   "changedAt": "2026-10-18T15:30:01Z" }
 ```
+
+#### `IntentRejected`
+
+| | |
+| --- | --- |
+| Producer | Orders Service (outbox), when the state engine consumes an intent that does not match a valid transition (terminal order, wrong status, driver no longer assigned, …) |
+| Consumers | Tracking Query (sets `TrackingView.lastRejectedIntent`). Other consumers of `orders.events` ignore it. |
+| Topic / key | `orders.events` / `orderId` |
+| Ordering | Per order. It does not change the order, so its `aggregateVersion` **repeats** the current order version instead of raising it; consumers must not apply it through the status version guard (`aggregateVersion` greater than stored), but by `at` / `intentId`. |
+| Idempotency | One event per rejected intent (`intentId`); the rejection is also stored in `rejected_intents`. The intent is never retried. |
+| Retries | 3 in-process retries, then `orders.events.dlq`. |
+
+```json
+{ "orderId": "6f1c2b7e-…", "intentId": "c2d4e6f8-…",
+  "lastRejectedIntent": { "type": "PICKUP_CONFIRMED", "reason": "Order is CANCELLED; PICKUP_CONFIRMED is not allowed.", "at": "2026-10-18T15:31:00Z" } }
+```
+
+> **Implementation status:** Orders publishes `IntentRejected`, but Tracking Query does not consume it yet, so `lastRejectedIntent` is currently always `null`.
 
 #### `LocationUpdated`
 

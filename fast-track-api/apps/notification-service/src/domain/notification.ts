@@ -20,7 +20,8 @@ export type NotificationChannel = (typeof NotificationChannels)[number];
  * `NotificationLogEntry.status`), plus PENDING: an internal state for a row
  * that was claimed (inserted) but whose first send has not finished yet. It
  * lets the service insert first and send second, so the UNIQUE constraint
- * decides who sends. Not in the spec yet: to be agreed with the team.
+ * decides who sends. Part of the spec enum (spec 3). FAILED is in the enum but
+ * not written: a failed send goes straight to RETRYING or DEAD_LETTERED.
  */
 export const NotificationStatuses = ['PENDING', 'SENT', 'FAILED', 'RETRYING', 'DEAD_LETTERED'] as const;
 export type NotificationStatus = (typeof NotificationStatuses)[number];

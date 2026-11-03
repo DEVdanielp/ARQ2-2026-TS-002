@@ -124,8 +124,12 @@ expiry, assignment) and Pub/Sub; the PostgreSQL test runs in a throw-away schema
 
 ## Notes
 
-- `lastRejectedIntent` is part of the spec's `TrackingView`, but no event of
-  spec §5.4 carries rejected intents to this service yet, so it is always `null`.
+- `lastRejectedIntent` is part of the spec's `TrackingView` and is carried by
+  `IntentRejected` on `orders.events` (spec §5.4), but this service does not
+  consume that event yet, so the field is always `null`. It cannot go through
+  the status guard: the event repeats the current `aggregateVersion`.
+- The SSE `id` (and `Last-Event-ID`) is the view `revision`, not the order
+  `version` (spec §4.4).
 - `trackingAvailable` turning false after 5 minutes without points is computed
   when the view is read; the SSE stream sends views on changes only, so clients
   should also use `lastLocationDeviceTime` to show "Tracking temporarily unavailable".

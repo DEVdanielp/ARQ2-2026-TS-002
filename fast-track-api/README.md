@@ -10,7 +10,7 @@ libraries. The contract is [`docs/spec.md`](../docs/spec.md); decisions are in
 | --- | --- |
 | `apps/gps-ingestion-api` | F2: receives GPS batches, publishes `GpsBatchReceived` ([README](apps/gps-ingestion-api/README.md)) |
 | `apps/gps-tracking-worker` | F2/F5: processes GPS in order, detects NEARBY ([README](apps/gps-tracking-worker/README.md)) |
-| `apps/orders-service` | F4: order state machine (not implemented yet: Nest scaffold only) |
+| `apps/orders-service` | F4: order state machine, intents over REST → Kafka, idempotency keys ([README](apps/orders-service/README.md)) |
 | `apps/profiles-service` | F1: profiles and driver assignment ([README](apps/profiles-service/README.md)) |
 | `apps/tracking-query-service` | F3: read model in Redis, REST + SSE, route audit ([README](apps/tracking-query-service/README.md)) |
 | `apps/notification-service` | F5: push/email notifications ([README](apps/notification-service/README.md)) |
@@ -37,6 +37,7 @@ npm run openapi:notification-service   # regenerate docs/openapi/notification-se
 npm run openapi:gps-ingestion-api      # regenerate docs/openapi/gps-ingestion-api.json
 npm run openapi:profiles-service       # regenerate docs/openapi/profiles-service.json
 npm run openapi:tracking-query-service # regenerate docs/openapi/tracking-query-service.json
+npm run openapi:orders-service         # regenerate docs/openapi/orders-service.json
 ```
 
 Relative imports must end in `.js` (`"module": "nodenext"`). Add dependencies
