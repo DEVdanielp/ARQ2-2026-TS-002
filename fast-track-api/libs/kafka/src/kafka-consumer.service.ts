@@ -35,6 +35,7 @@ import type { Topic } from '@libs/events';
 import { KAFKA_CLIENT, KAFKA_OPTIONS } from './kafka.constants.js';
 import type { ResolvedKafkaOptions } from './kafka.options.js';
 import { KafkaProducerService } from './kafka-producer.service.js';
+import { observeConsumed } from './kafka-telemetry.js';
 import { MessageProcessor, type EventHandler } from './message-processor.js';
 
 /** Options of {@link KafkaConsumerService.subscribe}. */
@@ -121,15 +122,18 @@ export class KafkaConsumerService implements OnModuleDestroy {
       eachMessage: async ({ topic: source, partition, message }) => {
         // Handle (with retries, or dead-letter). Throws only if the DLQ write
         // failed; then we skip the commit and the client redelivers the same
-        // message, so nothing is lost.
-        await processor.process({
-          topic: source,
-          partition,
-          offset: message.offset,
-          key: message.key,
-          value: message.value,
-          headers: message.headers ?? {},
-        });
+        // message, so nothing is lost. Runs inside a span, with metrics.
+        const headers = message.headers ?? {};
+        await observeConsumed({ topic: source, partition, offset: message.offset, groupId, headers }, () =>
+          processor.process({
+            topic: source,
+            partition,
+            offset: message.offset,
+            key: message.key,
+            value: message.value,
+            headers,
+          }),
+        );
 
         // Commit AFTER processing => at-least-once delivery: if we crash
         // between the handler and this line, the message is delivered again on

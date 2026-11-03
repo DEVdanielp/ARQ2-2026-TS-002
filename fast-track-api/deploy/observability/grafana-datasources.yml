@@ -16,10 +16,16 @@ datasources:
     jsonData:
       derivedFields:
         # Click a correlationId in a log line to search it across all services
+        # (Promtail only labels `service` and `container`, so it is a text search)
         - name: correlationId
           matcherRegex: '"correlationId":"([^"]+)"'
-          url: '{correlationId="$${__value.raw}"}'
+          url: '{service=~".+"} |= "$${__value.raw}"'
           datasourceUid: loki
+        # Click a traceId (added by libs/observability) to open the trace in Tempo
+        - name: traceId
+          matcherRegex: '"traceId":"([0-9a-f]{32})"'
+          url: '$${__value.raw}'
+          datasourceUid: tempo
 
   - name: Tempo
     uid: tempo
@@ -27,5 +33,10 @@ datasources:
     access: proxy
     url: http://tempo:3200
     jsonData:
+      # From a span to its log lines: same service, lines that carry the trace id
       tracesToLogsV2:
         datasourceUid: loki
+        filterByTraceID: true
+        tags:
+          - key: service.name
+            value: service

@@ -53,6 +53,7 @@ For the order state (2):
 - The `UNIQUE` constraint includes `device_time` (PostgreSQL requires the partition key). A device that re-sends a sequence with a different time is caught by the worker's "already stored" check, not by the constraint.
 - A partition cannot be created while the `DEFAULT` partition holds rows of that month (a clock far ahead). *Mitigation:* the worker logs a warning; those points stay queryable in `gps_points_default`.
 - The ETA contract is an assumption until a provider is chosen.
+- Tracking Query's route audit (`GET /tracking/{orderId}/route`) is built from `LocationUpdated`, so it holds one point per batch, not every point. *Mitigation:* accepted by the team as enough to audit the path (spec §4.4); the full history is kept in `gps_points` for manual investigation.
 
 ## Final Justification
 

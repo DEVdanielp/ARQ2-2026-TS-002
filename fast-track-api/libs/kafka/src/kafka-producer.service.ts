@@ -26,6 +26,7 @@ import type { DlqTopic, EventEnvelope, Topic } from '@libs/events';
 import { KAFKA_CLIENT, KAFKA_OPTIONS } from './kafka.constants.js';
 import { KafkaHeaders, type KafkaHeaderMap } from './kafka-headers.js';
 import type { ResolvedKafkaOptions } from './kafka.options.js';
+import { observePublish } from './kafka-telemetry.js';
 
 /** A message ready to be written as-is: used to forward messages to a DLQ. */
 export interface RawKafkaMessage {
@@ -174,10 +175,13 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
    * @param topic - destination topic, e.g. `dlqTopic(Topics.GPS_BATCHES)`.
    */
   async send(topic: string, message: RawKafkaMessage): Promise<PublishResult> {
-    const [metadata] = await this.producer.send({ topic, messages: [message] });
-    // The client does not always report the offset; omit it rather than log `undefined`.
-    return metadata.offset === undefined
-      ? { partition: metadata.partition }
-      : { partition: metadata.partition, offset: metadata.offset };
+    // Every write (publish, outbox relay, DLQ) goes through here: one span + metric.
+    return observePublish(topic, message.headers, async () => {
+      const [metadata] = await this.producer.send({ topic, messages: [message] });
+      // The client does not always report the offset; omit it rather than log `undefined`.
+      return metadata.offset === undefined
+        ? { partition: metadata.partition }
+        : { partition: metadata.partition, offset: metadata.offset };
+    });
   }
 }

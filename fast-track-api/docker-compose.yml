@@ -40,8 +40,9 @@ x-app-env: &app-env
   port: "3000" # main.ts currently reads process.env.port
   KAFKA_BROKERS: kafka:19092
   KEYCLOAK_ISSUER: http://localhost:8180/realms/fasttrack
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
-  LOG_LEVEL: info
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318 # traces (trace id = correlationId), libs/observability
+  LOG_LEVEL: info # error | warn | info | debug | verbose
+  LOG_FORMAT: json # one JSON object per line, shipped to Loki by Promtail
 
 services:
   # ───────────────────────────── Event bus ─────────────────────────────

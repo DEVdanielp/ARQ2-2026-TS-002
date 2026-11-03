@@ -1,12 +1,16 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { NestFactory } from '@nestjs/core';
+import { initObservability, setupHttpObservability } from '@libs/observability';
 import { createValidationPipe, ProblemDetailsFilter, setupSwagger } from '@libs/http';
 import { TrackingQueryServiceModule } from './tracking-query-service.module.js';
 import { buildTrackingOpenApi, SWAGGER_PATH } from './openapi.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(TrackingQueryServiceModule);
+  // JSON logs, Prometheus metrics and traces (libs/observability).
+  const { logger } = initObservability('tracking-query-service');
+  const app = await NestFactory.create(TrackingQueryServiceModule, { logger });
+  setupHttpObservability(app);
   // Kong forwards the full path, /v1 included (strip_path: false in deploy/kong/kong.yml).
   app.setGlobalPrefix('v1');
   // Every error leaves as application/problem+json (spec 2).

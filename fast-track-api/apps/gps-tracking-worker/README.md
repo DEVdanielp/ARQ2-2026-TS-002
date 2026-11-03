@@ -3,7 +3,8 @@
 Processes each driver's GPS points strictly in sequence order, stores the
 append-only history, keeps the last known location, publishes it for the
 driver's orders on the way and detects proximity (NEARBY). Owns `tracking-db`.
-A pure Kafka consumer: **no HTTP API**. Contract: `docs/spec.md` §5.4, F2, F5;
+A pure Kafka consumer: **no HTTP API** (a small server on `PORT` only answers
+`GET /metrics` for Prometheus and `GET /health`, see `libs/observability`). Contract: `docs/spec.md` §5.4, F2, F5;
 decisions: ADR-001, ADR-009, ADR-011, ADR-013, ADR-015, ADR-018, ADR-020.
 
 ## Structure (hexagonal, ADR-014)

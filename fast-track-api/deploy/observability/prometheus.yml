@@ -6,9 +6,9 @@ scrape_configs:
     static_configs:
       - targets: ["kong:8100"]
 
-  # PLANNED: no service exposes GET /metrics yet (libs/observability is not
-  # implemented), so these targets show as DOWN. The GPS Tracking Worker has no
-  # HTTP server today; it will need one only for /metrics.
+  # Each service exposes GET /metrics on port 3000 (libs/observability,
+  # @prometheus-io/client); the GPS Tracking Worker runs a small server for it.
+  # Targets show as DOWN until the services run with `--profile apps`.
   - job_name: services
     metrics_path: /metrics
     static_configs:

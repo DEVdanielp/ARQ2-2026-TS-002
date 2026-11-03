@@ -592,6 +592,8 @@ data: {"orderId":"6f1c…","status":"ON_THE_WAY","version":4,"nearbyReached":tru
 
 Route audit for operations, from the archive.
 
+The archive is fed by `LocationUpdated`, which carries one point per processed batch (the newest, [ADR-018](adrs/018-gps-tracking-state-and-late-points.md) point 3). The route is therefore **sampled**: one point per batch the driver sent (every few seconds online, one per reconnection after a signal loss), not every GPS point. This is accepted as enough to audit the path followed; the complete, point-by-point history stays in `tracking-db` (`gps_points`), owned by the GPS Tracking Worker, for manual investigation.
+
 | | |
 | --- | --- |
 | Auth | JWT, role `OPERATIONS` |

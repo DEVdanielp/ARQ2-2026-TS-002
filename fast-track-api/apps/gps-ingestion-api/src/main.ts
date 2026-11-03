@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { NestFactory } from '@nestjs/core';
+import { initObservability, setupHttpObservability } from '@libs/observability';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { setupSwagger } from '@libs/http';
 import { GpsIngestionApiModule } from './gps-ingestion-api.module.js';
@@ -8,8 +9,11 @@ import { configureHttp } from './http-setup.js';
 import { buildIngestionOpenApi, SWAGGER_PATH } from './openapi.js';
 
 async function bootstrap() {
+  // JSON logs, Prometheus metrics and traces (libs/observability).
+  const { logger } = initObservability('gps-ingestion-api');
   // bodyParser: false -> configureHttp registers the JSON parser with its size limit.
-  const app = await NestFactory.create<NestExpressApplication>(GpsIngestionApiModule, { bodyParser: false });
+  const app = await NestFactory.create<NestExpressApplication>(GpsIngestionApiModule, { bodyParser: false, logger });
+  setupHttpObservability(app);
   configureHttp(app);
   // Swagger UI at /v1/gps-ingestion/docs (disable with SWAGGER_ENABLED=false).
   if (process.env.SWAGGER_ENABLED !== 'false') {

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { NestFactory } from '@nestjs/core';
+import { initObservability, setupHttpObservability } from '@libs/observability';
 import {
   createValidationPipe,
   ProblemDetailsFilter,
@@ -10,7 +11,10 @@ import { ProfilesServiceModule } from './profiles-service.module.js';
 import { buildProfilesOpenApi, SWAGGER_PATH } from './openapi.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(ProfilesServiceModule);
+  // JSON logs, Prometheus metrics and traces (libs/observability).
+  const { logger } = initObservability('profiles-service');
+  const app = await NestFactory.create(ProfilesServiceModule, { logger });
+  setupHttpObservability(app);
   // Kong forwards the full path, /v1 included (strip_path: false in deploy/kong/kong.yml).
   app.setGlobalPrefix('v1');
   // Every error leaves as application/problem+json (spec 2).

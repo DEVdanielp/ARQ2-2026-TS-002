@@ -62,7 +62,9 @@ order id on the channel `tracking:changes`. Active orders never expire;
   change (newest `revision` wins). Serves `GET /tracking/{orderId}` once the
   Redis key expired (F3-S5).
 - `route_points`: every `LocationUpdated`, once per `(order, sequence)`.
-  Serves the route audit.
+  Serves the route audit. The worker sends one `LocationUpdated` per batch
+  (ADR-018), so the route is sampled (one point per batch), as accepted in
+  spec §4.4; the full history is in the worker's `gps_points`.
 
 **Read-time rule** (F3-S2/S3): `locationAgeSeconds` = now − `lastLocationDeviceTime`;
 `trackingAvailable` = there is a location and it is less than 300 s old. The

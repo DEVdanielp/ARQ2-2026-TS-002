@@ -19,7 +19,7 @@ libraries. The contract is [`docs/spec.md`](../docs/spec.md); decisions are in
 | `libs/auth` | caller identity and role checks ([README](libs/auth/README.md)) |
 | `libs/http` | problem+json errors and request validation (spec §2) ([README](libs/http/README.md)) |
 | `libs/outbox` | transactional outbox with delayed publication (ADR-005, ADR-017) ([README](libs/outbox/README.md)) |
-| `libs/observability` | not implemented yet: no service exposes `/metrics` or sends OTLP traces, although Prometheus, Loki, Tempo and Grafana run in Docker (container logs do reach Loki through Promtail) |
+| `libs/observability` | Prometheus metrics (`GET /metrics`), OpenTelemetry traces to Tempo (trace id = correlation id) and JSON logs for Loki ([README](libs/observability/README.md)) |
 
 Each service follows a hexagonal structure (ADR-014): `domain/`,
 `application/`, `adapters/in/*`, `adapters/out/*`.
