@@ -13,6 +13,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { instrumentDataSource } from '@libs/observability';
+import { DataSource } from 'typeorm';
 import { OUTBOX_ENTITIES, OUTBOX_MIGRATIONS } from '@libs/outbox';
 import type { ProfilesEnvironment } from '../../../config/environment.js';
 import { ProfilesStore } from '../../../application/ports.js';
@@ -37,6 +39,12 @@ export const PROFILES_MIGRATIONS = [
         migrationsRun: true,
         synchronize: false,
       }),
+      // Every SQL statement inside a request or Kafka message becomes a span (libs/observability).
+      dataSourceFactory: async (options) => {
+        const dataSource = new DataSource(options!);
+        instrumentDataSource(dataSource);
+        return dataSource.initialize();
+      },
     }),
   ],
   providers: [{ provide: ProfilesStore, useClass: PostgresProfilesStore }],

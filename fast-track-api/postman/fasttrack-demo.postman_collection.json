@@ -1,0 +1,1416 @@
+{
+  "info": {
+    "_postman_id": "2151c04d-0bb6-45c3-9120-0de3703b10f7",
+    "name": "FastTrack - Demo sagas, compensaciones y Jaeger",
+    "description": "Demo en 5 partes, una por expositor. Ejecuta las carpetas EN ORDEN: cada una deja el sistema listo para la siguiente.\n\nCada petición manda un X-Correlation-Id nuevo; su versión sin guiones es el trace id de Jaeger. Después de enviar, abre la pestaña Visualize de la respuesta para ver el enlace a la traza. Los trace ids de los pasos clave (★) quedan guardados en las variables trace_* de la colección.\n\nSi gpsSeq se reinicia o ya enviaste puntos antes, súbelo a un número mayor en las variables de la colección.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// ===== FastTrack demo: script de colección (se ejecuta antes de CADA petición) =====",
+          "// 1) Un X-Correlation-Id nuevo por petición. Kong lo respeta y el proyecto lo usa como trace id de Jaeger.",
+          "const isToken = pm.request.url.toString().includes('openid-connect/token');",
+          "if (!isToken) {",
+          "  const cid = pm.variables.replaceIn('{{$guid}}');",
+          "  pm.collectionVariables.set('correlationId', cid);",
+          "  pm.collectionVariables.set('traceId', cid.replace(/-/g, ''));",
+          "}",
+          "",
+          "// 2) Tokens de Keycloak de los 4 usuarios, renovados solos cada 10 min (duran 15).",
+          "const users = ['customer1', 'driver1', 'driver2', 'ops1'];",
+          "const ts = Number(pm.collectionVariables.get('tokenTs') || 0);",
+          "if (!isToken && Date.now() - ts > 10 * 60 * 1000) {",
+          "  const kc = pm.collectionVariables.get('keycloakUrl');",
+          "  users.forEach((u) => {",
+          "    pm.sendRequest({",
+          "      url: kc + '/realms/fasttrack/protocol/openid-connect/token',",
+          "      method: 'POST',",
+          "      header: { 'Content-Type': 'application/x-www-form-urlencoded' },",
+          "      body: { mode: 'urlencoded', urlencoded: [",
+          "        { key: 'grant_type', value: 'password' },",
+          "        { key: 'client_id', value: 'fasttrack-dev' },",
+          "        { key: 'username', value: u },",
+          "        { key: 'password', value: 'password' } ] }",
+          "    }, (err, res) => {",
+          "      if (err || res.code !== 200) { console.error('No se pudo obtener token de ' + u, err || res.text()); return; }",
+          "      pm.collectionVariables.set('token_' + u, res.json().access_token);",
+          "    });",
+          "  });",
+          "  pm.collectionVariables.set('tokenTs', String(Date.now()));",
+          "}",
+          "",
+          "// 3) Datos para los puntos GPS: secuencia creciente y hora actual en RFC 3339.",
+          "if (pm.request.url.toString().includes('/drivers/me/locations')) {",
+          "  const seq = Number(pm.collectionVariables.get('gpsSeq') || 0) + 1;",
+          "  pm.collectionVariables.set('gpsSeq', String(seq));",
+          "  pm.collectionVariables.set('gpsLat', (6.2300 - 0.0015 * seq).toFixed(5));",
+          "  pm.collectionVariables.set('gpsTime', new Date().toISOString().replace(/\\.\\d{3}Z$/, 'Z'));",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// ===== Script de colección (después de CADA petición): enlace a Jaeger en la pestaña Visualize =====",
+          "if (!pm.request.url.toString().includes('openid-connect')) {",
+          "  const traceId = pm.collectionVariables.get('traceId');",
+          "  const jaeger = pm.collectionVariables.get('jaegerUrl') + '/trace/' + traceId;",
+          "  const names = { '22222222-2222-4222-8222-222222222221': 'driver1 (Carlos)', '22222222-2222-4222-8222-222222222222': 'driver2 (Ana)' };",
+          "  let body = {};",
+          "  try { body = pm.response.json(); } catch (e) { body = pm.response.text(); }",
+          "  const pick = (k) => (body && typeof body === 'object' && k in body) ? body[k] : undefined;",
+          "  const driver = pick('driverId');",
+          "  const rows = [",
+          "    ['HTTP', pm.response.code + ' ' + pm.response.status],",
+          "    ['status', pick('status')],",
+          "    ['driverId', driver === null ? 'null (sin conductor)' : (driver ? (names[driver] || driver) : undefined)],",
+          "    ['version', pick('version')],",
+          "    ['orderId', pick('orderId')],",
+          "    ['batchId', pick('batchId')],",
+          "    ['availability', pick('availability')]",
+          "  ].filter((r) => r[1] !== undefined);",
+          "  console.log('[' + pm.info.requestName + '] Jaeger: ' + jaeger);",
+          "  pm.visualizer.set(`",
+          "    <div style=\"font-family:Segoe UI,Arial,sans-serif;padding:14px\">",
+          "      <h3 style=\"margin:0 0 8px\">{{name}}</h3>",
+          "      <table style=\"border-collapse:collapse;margin-bottom:10px\">",
+          "        {{#each rows}}<tr><td style=\"padding:3px 12px 3px 0;color:#666\">{{this.[0]}}</td><td style=\"padding:3px 0\"><b>{{this.[1]}}</b></td></tr>{{/each}}",
+          "      </table>",
+          "      <p style=\"margin:6px 0\"><b>Trace id (pegar en Jaeger → Lookup by Trace ID):</b><br><code style=\"font-size:14px\">{{traceId}}</code></p>",
+          "      <p style=\"margin:6px 0\"><a href=\"{{jaeger}}\" target=\"_blank\">{{jaeger}}</a></p>",
+          "      <details><summary>Respuesta completa</summary><pre>{{json}}</pre></details>",
+          "    </div>`,",
+          "    { name: pm.info.requestName, rows, traceId, jaeger, json: JSON.stringify(body, null, 2) });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000/v1"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8180"
+    },
+    {
+      "key": "jaegerUrl",
+      "value": "http://localhost:16686"
+    },
+    {
+      "key": "correlationId",
+      "value": ""
+    },
+    {
+      "key": "traceId",
+      "value": ""
+    },
+    {
+      "key": "tokenTs",
+      "value": "0"
+    },
+    {
+      "key": "token_customer1",
+      "value": ""
+    },
+    {
+      "key": "token_driver1",
+      "value": ""
+    },
+    {
+      "key": "token_driver2",
+      "value": ""
+    },
+    {
+      "key": "token_ops1",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "orderId2",
+      "value": ""
+    },
+    {
+      "key": "orderId3",
+      "value": ""
+    },
+    {
+      "key": "gpsSeq",
+      "value": "0"
+    },
+    {
+      "key": "gpsLat",
+      "value": ""
+    },
+    {
+      "key": "gpsTime",
+      "value": ""
+    },
+    {
+      "key": "trace_creacion",
+      "value": ""
+    },
+    {
+      "key": "trace_compensacion",
+      "value": ""
+    },
+    {
+      "key": "trace_409",
+      "value": ""
+    },
+    {
+      "key": "trace_cancelacion",
+      "value": ""
+    },
+    {
+      "key": "trace_gps_caido",
+      "value": ""
+    },
+    {
+      "key": "trace_compensacion_diferida",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Preparación (ANTES de empezar)",
+      "description": "Crea los perfiles y deja a driver1 AVAILABLE y a driver2 OFFLINE, para que el primer pedido le caiga a driver1.",
+      "item": [
+        {
+          "name": "1.1 Token de prueba (customer1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/fasttrack/protocol/openid-connect/token"
+            },
+            "description": "Solo para mostrar cómo se obtiene un JWT de Keycloak. Los tokens de los 4 usuarios se renuevan solos en el script de la colección.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "client_id",
+                  "value": "fasttrack-dev"
+                },
+                {
+                  "key": "username",
+                  "value": "customer1"
+                },
+                {
+                  "key": "password",
+                  "value": "password"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Token recibido', () => pm.expect(pm.response.json().access_token).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Perfil de cliente (customer1)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_customer1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customers/me"
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Laura Gómez\",\n  \"email\": \"laura@example.com\",\n  \"phone\": \"+573001234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 o 200', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Perfil de conductor (driver1 Carlos)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me"
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Carlos Ruiz\",\n  \"phone\": \"+573109876543\",\n  \"vehiclePlate\": \"ABC123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 o 200', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 Perfil de conductor (driver2 Ana)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver2}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me"
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ana Torres\",\n  \"phone\": \"+573109876544\",\n  \"vehiclePlate\": \"XYZ789\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 o 200', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.5 driver2 OFFLINE",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver2}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/availability"
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"OFFLINE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.6 driver1 AVAILABLE",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/availability"
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"AVAILABLE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Saga y compensación DriverUnassigned (Personas 1 y 2)",
+      "description": "Camino feliz (OrderCreated → DriverAssigned) y compensación cuando el conductor pasa a OFFLINE antes de recoger.",
+      "item": [
+        {
+          "name": "2.1 Crear pedido (customer1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_customer1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders"
+            },
+            "description": "Inicia la saga: orders-service guarda el pedido en CREATED y publica OrderCreated por el outbox.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": {\n    \"address\": \"Cra 43A #1-50, Medellín\",\n    \"location\": {\n      \"lat\": 6.2088,\n      \"lng\": -75.5679\n    }\n  },\n  \"notes\": \"Demo de saga\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('orderId', pm.response.json().orderId);",
+                  "pm.collectionVariables.set('trace_creacion', pm.collectionVariables.get('traceId'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Ver pedido: asignado a driver1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_ops1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}"
+            },
+            "description": "Espera 2-3 s después de 2.1. Version 2 = creado (1) + asignado (2)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('driverId = driver1', () => pm.expect(pm.response.json().driverId).to.eql('22222222-2222-4222-8222-222222222221'));",
+                  "pm.test('version = 2', () => pm.expect(pm.response.json().version).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 driver2 AVAILABLE",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver2}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/availability"
+            },
+            "description": "Ana se conecta: será la candidata para la reasignación.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"AVAILABLE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 ★ driver1 OFFLINE (dispara la compensación)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/availability"
+            },
+            "description": "profiles-service libera la asignación y publica DriverUnassigned; orders-service, gps-tracking-worker y tracking-query-service lo consumen. Luego reasigna a driver2. ABRE ESTE TRACE EN JAEGER.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"OFFLINE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('trace_compensacion', pm.collectionVariables.get('traceId'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5 Ver pedido: ahora driver2, version 4",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_ops1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}"
+            },
+            "description": "1 creado → 2 driver1 → 3 driverId=null (compensación) → 4 driver2."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('driverId = driver2', () => pm.expect(pm.response.json().driverId).to.eql('22222222-2222-4222-8222-222222222222'));",
+                  "pm.test('version = 4 (hubo un paso intermedio de compensación)', () => pm.expect(pm.response.json().version).to.eql(4));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.6 Ver asignación actual (ops1)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_ops1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/assignments?orderId={{orderId}}",
+              "query": [
+                {
+                  "key": "orderId",
+                  "value": "{{orderId}}"
+                }
+              ]
+            },
+            "description": "Asignación vigente del pedido. El historial completo (fila de driver1 con release_reason = DRIVER_OFFLINE) se ve en pgAdmin."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Punto de no retorno y cancelación (Persona 3)",
+      "description": "Después de la recogida ya no se puede compensar con DriverUnassigned (409). Luego, compensación por cancelación (OrderCancelled).",
+      "item": [
+        {
+          "name": "3.1 driver2 confirma la recogida (PICKUP_CONFIRMED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver2}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/intents"
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"PICKUP_CONFIRMED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Ver pedido: ON_THE_WAY",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_ops1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}"
+            },
+            "description": "Espera 2-3 s después de 3.1: el intent se aplica de forma asíncrona desde Kafka."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status = ON_THE_WAY', () => pm.expect(pm.response.json().status).to.eql('ON_THE_WAY'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 ★ driver2 OFFLINE con pedido en camino → 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver2}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/availability"
+            },
+            "description": "Punto de no retorno: el pedido ya fue recogido, deshacer la asignación sería incoherente.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"OFFLINE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                  "pm.collectionVariables.set('trace_409', pm.collectionVariables.get('traceId'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 Crear segundo pedido (customer1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_customer1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders"
+            },
+            "description": "driver1 está OFFLINE, así que se asigna a driver2 (tiene cupo: capacidad 3).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": {\n    \"address\": \"Cra 43A #1-50, Medellín\",\n    \"location\": {\n      \"lat\": 6.2088,\n      \"lng\": -75.5679\n    }\n  },\n  \"notes\": \"Demo de saga\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('orderId2', pm.response.json().orderId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.5 Ver pedido 2: asignado a driver2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_ops1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId2}}"
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('driverId = driver2', () => pm.expect(pm.response.json().driverId).to.eql('22222222-2222-4222-8222-222222222222'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.6 ★ Cliente cancela el pedido 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_customer1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId2}}/intents"
+            },
+            "description": "orders-service publica OrderCancelled: profiles libera el cupo de driver2, gps-worker lo saca de la ruta, notification avisa al cliente. ABRE ESTE TRACE EN JAEGER.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CANCELLATION_REQUESTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('trace_cancelacion', pm.collectionVariables.get('traceId'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.7 Ver pedido 2: CANCELLED",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_ops1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId2}}"
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status = CANCELLED', () => pm.expect(pm.response.json().status).to.eql('CANCELLED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.8 Ver asignación del pedido 2 (liberada)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_ops1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/assignments?orderId={{orderId2}}",
+              "query": [
+                {
+                  "key": "orderId",
+                  "value": "{{orderId2}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Servicio caído - GPS en Kafka (Persona 4)",
+      "description": "Apaga gps-tracking-worker: la ingesta sigue respondiendo 202 y los lotes esperan en gps.batches. El worker se queda APAGADO para la Persona 5.",
+      "item": [
+        {
+          "name": "4.1 Punto GPS (worker encendido, línea base)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver2}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/locations"
+            },
+            "description": "Usa el pedido 1 (ON_THE_WAY con driver2).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"points\": [\n    {\n      \"lat\": {{gpsLat}},\n      \"lng\": -75.569,\n      \"deviceTime\": \"{{gpsTime}}\",\n      \"sequence\": {{gpsSeq}}\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 [TERMINAL] Apagar el worker",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{jaegerUrl}}"
+            },
+            "description": "En PowerShell, en la carpeta fast-track-api:\n\n    docker compose --profile apps stop gps-tracking-worker\n\nNo envíes esta petición: es solo un recordatorio."
+          }
+        },
+        {
+          "name": "4.3 ★ Punto GPS con el worker apagado (envíalo 2 veces)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver2}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/locations"
+            },
+            "description": "Cada envío responde 202: el cliente no se entera de la caída. El mensaje queda en gps.batches (lag en Kafka UI → Consumers → gps-tracking-worker).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"points\": [\n    {\n      \"lat\": {{gpsLat}},\n      \"lng\": -75.569,\n      \"deviceTime\": \"{{gpsTime}}\",\n      \"sequence\": {{gpsSeq}}\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('trace_gps_caido', pm.collectionVariables.get('traceId'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 Ver seguimiento: no se actualiza",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_customer1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tracking/{{orderId}}"
+            },
+            "description": "Sigue mostrando la ubicación de 4.1. NO enciendas el worker: la Persona 5 sigue con él apagado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Compensación diferida + recuperación (Persona 5)",
+      "description": "Con el worker todavía apagado: la compensación DriverUnassigned también espera en Kafka. Al encenderlo, procesa GPS y compensación en orden.",
+      "item": [
+        {
+          "name": "5.1 driver1 AVAILABLE",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/availability"
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"AVAILABLE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Crear tercer pedido (customer1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_customer1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders"
+            },
+            "description": "Se asigna a driver1 (0 pedidos activos frente a 1 de driver2). Espera 2-3 s antes de 5.3.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": {\n    \"address\": \"Cra 43A #1-50, Medellín\",\n    \"location\": {\n      \"lat\": 6.2088,\n      \"lng\": -75.5679\n    }\n  },\n  \"notes\": \"Demo de saga\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('orderId3', pm.response.json().orderId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 ★ driver1 OFFLINE con el worker apagado",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_driver1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/drivers/me/availability"
+            },
+            "description": "La compensación se publica, pero gps-tracking-worker no está para consumirla.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": \"OFFLINE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('trace_compensacion_diferida', pm.collectionVariables.get('traceId'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 Ver pedido 3: orders-service ya compensó (driver2, version 4)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_ops1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId3}}"
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('driverId = driver2', () => pm.expect(pm.response.json().driverId).to.eql('22222222-2222-4222-8222-222222222222'));",
+                  "pm.test('version = 4', () => pm.expect(pm.response.json().version).to.eql(4));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5 [TERMINAL] Encender el worker",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{jaegerUrl}}"
+            },
+            "description": "    docker compose --profile apps start gps-tracking-worker\n\nEspera 10 s. No envíes esta petición: es solo un recordatorio."
+          }
+        },
+        {
+          "name": "5.6 Ver seguimiento: ubicación actualizada",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_customer1}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "{{correlationId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tracking/{{orderId}}"
+            },
+            "description": "Los puntos de 4.3 ya se procesaron. Luego abre trace_compensacion_diferida y trace_gps_caido en Jaeger."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

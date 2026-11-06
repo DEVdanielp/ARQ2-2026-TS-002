@@ -5,6 +5,8 @@
  * the use case can keep falling back to distance (ADR-013) while the logs and
  * the ResilientEtaProvider can tell a bad API key from a busy provider.
  */
+import { SpanStatusCode } from '@opentelemetry/api';
+import { traceClient } from '@libs/observability';
 
 export type EtaProviderErrorKind =
   /** No answer within ETA_TIMEOUT_MS. */
@@ -50,6 +52,31 @@ export interface JsonResponse {
 }
 
 /**
+ * `fetch` inside a CLIENT span (`<provider> <METHOD>`), child of the GPS batch
+ * being processed. The query string is not recorded (it carries coordinates);
+ * a 4xx/5xx answer marks the span as failed.
+ */
+export function tracedFetch(provider: string, url: URL, init: RequestInit): Promise<Response> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  return traceClient(
+    `${provider} ${method}`,
+    {
+      'http.request.method': method,
+      'server.address': url.hostname,
+      ...(url.port ? { 'server.port': Number(url.port) } : {}),
+      'url.path': url.pathname,
+      'fasttrack.eta_provider': provider,
+    },
+    async (span) => {
+      const response = await fetch(url, init);
+      span?.setAttribute('http.response.status_code', response.status);
+      if (response.status >= 400) span?.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${response.status}` });
+      return response;
+    },
+  );
+}
+
+/**
  * One HTTP call with a hard timeout. Network failures and timeouts become
  * EtaProviderError; HTTP error statuses are returned to the caller, which
  * knows how its provider reports errors in the body.
@@ -57,7 +84,7 @@ export interface JsonResponse {
 export async function requestJson(provider: string, url: URL, init: RequestInit, timeoutMs: number): Promise<JsonResponse> {
   let response: Response;
   try {
-    response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    response = await tracedFetch(provider, url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     const name = error instanceof Error ? error.name : '';
     if (name === 'TimeoutError' || name === 'AbortError') {

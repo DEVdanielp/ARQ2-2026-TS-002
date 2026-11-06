@@ -10,6 +10,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { instrumentDataSource } from '@libs/observability';
+import { DataSource } from 'typeorm';
 import type { TrackingQueryEnvironment } from '../../../config/environment.js';
 import { TrackingArchive } from '../../../application/ports.js';
 import { InitialSchema1793491200000 } from './migrations/1793491200000-initial-schema.js';
@@ -30,6 +32,12 @@ export const ARCHIVE_MIGRATIONS = [InitialSchema1793491200000];
         migrationsRun: true,
         synchronize: false,
       }),
+      // Every SQL statement inside a request or Kafka message becomes a span (libs/observability).
+      dataSourceFactory: async (options) => {
+        const dataSource = new DataSource(options!);
+        instrumentDataSource(dataSource);
+        return dataSource.initialize();
+      },
     }),
   ],
   providers: [{ provide: TrackingArchive, useClass: PostgresTrackingArchive }],

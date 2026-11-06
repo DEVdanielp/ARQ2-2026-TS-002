@@ -4,6 +4,7 @@
  * libs/observability/README.md.
  */
 export * from './bootstrap.js';
+export * from './client-spans.js';
 export * from './http.js';
 export * from './logger.js';
 export * from './metrics.js';

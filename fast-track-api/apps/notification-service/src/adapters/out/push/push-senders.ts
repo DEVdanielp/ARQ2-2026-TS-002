@@ -13,6 +13,7 @@ import { Logger } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
 import { cert, initializeApp, type ServiceAccount } from 'firebase-admin/app';
 import { getMessaging, type Messaging } from 'firebase-admin/messaging';
+import { traceClient } from '@libs/observability';
 import { PushSender, type PushMessage } from '../../../application/ports.js';
 
 export class FcmPushSender extends PushSender {
@@ -27,7 +28,10 @@ export class FcmPushSender extends PushSender {
   async send(message: PushMessage): Promise<void> {
     // Tokens registered by the app may carry an "fcm:" prefix (spec 4.5 example).
     const token = message.deviceToken.replace(/^fcm:/, '');
-    await this.messaging.send({ token, notification: { title: message.title, body: message.body } });
+    // The device token is not recorded on the span.
+    await traceClient('fcm send', { 'rpc.system': 'fcm', 'server.address': 'fcm.googleapis.com' }, () =>
+      this.messaging.send({ token, notification: { title: message.title, body: message.body } }),
+    );
   }
 }
 
@@ -35,7 +39,9 @@ export class LoggingPushSender extends PushSender {
   private readonly logger = new Logger('PushSender');
 
   async send(message: PushMessage): Promise<void> {
-    this.logger.log({ msg: 'Push (log only, FCM_CREDENTIALS_FILE is empty)', ...message });
+    await traceClient('push send (log only)', { 'rpc.system': 'log' }, async () => {
+      this.logger.log({ msg: 'Push (log only, FCM_CREDENTIALS_FILE is empty)', ...message });
+    });
   }
 }
 

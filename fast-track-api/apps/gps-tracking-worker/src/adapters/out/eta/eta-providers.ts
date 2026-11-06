@@ -19,6 +19,7 @@
 import { Logger } from '@nestjs/common';
 import type { GeoLocation } from '@libs/events';
 import { EtaProvider } from '../../../application/ports.js';
+import { tracedFetch } from './eta-provider-error.js';
 import { OpenRouteServiceEtaProvider } from './openrouteservice-eta-provider.js';
 import { OsrmEtaProvider } from './osrm-eta-provider.js';
 import { ResilientEtaProvider, type EtaBudget } from './resilient-eta-provider.js';
@@ -48,7 +49,7 @@ export class HttpEtaProvider extends EtaProvider {
     url.searchParams.set('destinationLat', String(to.lat));
     url.searchParams.set('destinationLng', String(to.lng));
 
-    const response = await fetch(url, { signal: AbortSignal.timeout(this.timeoutMs) });
+    const response = await tracedFetch('http', url, { signal: AbortSignal.timeout(this.timeoutMs) });
     if (!response.ok) throw new Error(`ETA provider answered ${response.status}`);
     const body = (await response.json()) as { etaSeconds?: unknown };
     if (typeof body.etaSeconds !== 'number' || !Number.isFinite(body.etaSeconds) || body.etaSeconds < 0) {

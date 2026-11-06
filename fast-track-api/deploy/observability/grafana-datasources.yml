@@ -40,3 +40,17 @@ datasources:
         tags:
           - key: service.name
             value: service
+
+  # Same traces as Tempo (both fed by the OpenTelemetry Collector); Jaeger UI at http://localhost:16686
+  - name: Jaeger
+    uid: jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        filterByTraceID: true
+        tags:
+          - key: service.name
+            value: service

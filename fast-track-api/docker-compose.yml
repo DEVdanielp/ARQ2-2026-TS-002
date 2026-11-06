@@ -16,7 +16,9 @@
 #   8090  Swagger UI (REST docs of every service, from ../docs/openapi)
 #   6379  Redis (tracking-cache)
 #   8025  MailHog UI (SMTP on 1025)
-#   3001  Grafana · 9090 Prometheus · 3100 Loki · 3200 Tempo (OTLP 4317/4318)
+#   3001  Grafana · 9090 Prometheus · 3100 Loki · 3200 Tempo
+#   16686 Jaeger UI (distributed traces of every service)
+#   4317/4318 OpenTelemetry Collector (OTLP gRPC/HTTP → Jaeger + Tempo)
 #
 # Everything here is for local development only (fixed passwords, dev keys).
 
@@ -40,7 +42,7 @@ x-app-env: &app-env
   port: "3000" # main.ts currently reads process.env.port
   KAFKA_BROKERS: kafka:19092
   KEYCLOAK_ISSUER: http://localhost:8180/realms/fasttrack
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318 # traces (trace id = correlationId), libs/observability
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318 # traces (trace id = correlationId) → Jaeger + Tempo, libs/observability
   LOG_LEVEL: info # error | warn | info | debug | verbose
   LOG_FORMAT: json # one JSON object per line, shipped to Loki by Promtail
 
@@ -171,6 +173,25 @@ services:
       retries: 20
     networks: [fasttrack]
 
+  # Web UI for Redis (http://localhost:5540). The connection to the redis
+  # service is pre-registered: db 0 holds tracking:view:{orderId}, db 1 Kong's
+  # rate-limiting counters (pick the db in the connection's logical database).
+  redisinsight:
+    image: redis/redisinsight:2.70
+    ports:
+      - "5540:5540"
+    environment:
+      RI_REDIS_HOST: redis
+      RI_REDIS_PORT: "6379"
+      RI_REDIS_ALIAS: fasttrack-redis
+      RI_ACCEPT_TERMS_AND_CONDITIONS: "true"
+    volumes:
+      - redisinsight-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [fasttrack]
+
   # ───────────────────────────── Edge ─────────────────────────────
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
@@ -259,14 +280,34 @@ services:
     depends_on: [loki]
     networks: [fasttrack]
 
-  # Distributed tracing (OpenTelemetry OTLP)
+  # Single OTLP entry point: every service sends its spans here and the
+  # collector forwards each one to Jaeger and to Tempo (deploy/observability/otel-collector.yml).
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    command: ["--config=/etc/otelcol/config.yml"]
+    ports:
+      - "4317:4317" # OTLP gRPC (also for tools running on the host)
+      - "4318:4318" # OTLP HTTP
+    volumes:
+      - ./deploy/observability/otel-collector.yml:/etc/otelcol/config.yml:ro
+    depends_on: [jaeger, tempo]
+    networks: [fasttrack]
+
+  # Jaeger v2 all-in-one: OTLP receiver + in-memory storage + UI (http://localhost:16686).
+  # Search a business flow by its correlation id without dashes (= trace id).
+  # Traces live in memory: restarting the container clears them.
+  jaeger:
+    image: jaegertracing/jaeger:2.5.0
+    ports:
+      - "16686:16686" # UI
+    networks: [fasttrack]
+
+  # Distributed tracing for Grafana (receives OTLP from the collector, inside the network only)
   tempo:
     image: grafana/tempo:2.6.1
     command: ["-config.file=/etc/tempo/tempo.yml"]
     ports:
       - "3200:3200"
-      - "4317:4317"
-      - "4318:4318"
     volumes:
       - ./deploy/observability/tempo.yml:/etc/tempo/tempo.yml:ro
     networks: [fasttrack]
@@ -283,7 +324,7 @@ services:
       - ./deploy/observability/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - ./deploy/observability/dashboards:/etc/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
-    depends_on: [prometheus, loki, tempo]
+    depends_on: [prometheus, loki, tempo, jaeger]
     networks: [fasttrack]
 
   # ───────────────────────────── Services (profile "apps") ─────────────────────────────
@@ -371,4 +412,5 @@ volumes:
   postgres-data:
   pgadmin-data:
   redis-data:
+  redisinsight-data:
   grafana-data:

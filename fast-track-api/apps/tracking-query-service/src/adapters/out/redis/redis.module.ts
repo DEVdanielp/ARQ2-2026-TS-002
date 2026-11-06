@@ -10,6 +10,7 @@
 import { Global, Inject, Injectable, Logger, Module, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
+import { instrumentRedis } from '@libs/observability';
 import type { TrackingQueryEnvironment } from '../../../config/environment.js';
 
 export const REDIS_CLIENT = Symbol('REDIS_CLIENT');
@@ -38,6 +39,8 @@ class RedisShutdown implements OnApplicationShutdown {
           commandTimeout: 2_000,
         });
         redis.on('error', (error: Error) => logger.warn(`tracking-cache: ${error.message}`));
+        // Every command inside a request or Kafka message becomes a span (key only, no values).
+        instrumentRedis(redis);
         await redis.connect();
         return redis;
       },
